@@ -7,8 +7,8 @@ Cada paso: **RQ** que cubre · **Construir** (acotado) · **Verificar** antes de
 |---|---|---|---|---|---|---|
 | 1 | [x] 2026-11-23 · 8560b30 | Base del repo en GitHub (T1.1) | RQN 01 (sin secretos) | `.gitignore`, `CLAUDE.md`, `docs/CONTEXT.md`, `docs/ROADMAP.md`, `docs/CHANGELOG.md`, README con enlaces; commit + push | `git status` limpio; `git ls-files` sin `markitdown/`, `.serena/`, `.env`; repo visible en GitHub | URL del commit |
 | 2 | [x] 2026-11-23 · 82b8af0 | CI mínima (T1.1) | RQN 01, RQN 03 | Workflow de GitHub Actions: lint + tests de backend y `flutter analyze/test` (activado por carpeta) | Actions en verde en un push | Enlace al run |
-| 3 | [~] | Esqueleto backend (T1.2) | — | `backend/` FastAPI con `/health`, config por `.env`, pytest | `pytest` pasa; `curl /health` → 200 | Comando de arranque |
-| 4 | [ ] | Esqueleto Flutter (T1.2) | RQN 02, RQN 05 | `app/` Flutter, 1 pantalla que llama `/health` | `flutter test`; corre en emulador Android (iOS si hay Mac) | Plataformas probadas |
+| 3 | [x] 2026-11-23 · db3da1f | Esqueleto backend (T1.2) | — | `backend/` FastAPI con `/health`, config por `.env`, pytest | `pytest` pasa; `curl /health` → 200 | Comando de arranque |
+| 4 | [~] | Esqueleto Flutter (T1.2) | RQN 02, RQN 05 | `app/` Flutter, 1 pantalla que llama `/health` | `flutter test`; corre en emulador Android (iOS si hay Mac) | Plataformas probadas |
 | 5 | [ ] | Modelo de datos en Supabase (T1.3) | RQN 03, RQN 01 | Migraciones: perfil, cuentas, transacciones, categorías, presupuestos, bolsillos; montos NUMERIC; RLS | Migraciones aplican en limpio; test RLS: usuario A no lee datos de B | Lista de tablas |
 | 6 | [ ] | Auth backend (T1.4) | RQF 01, RQN 01 | Supabase Auth (email + Google OAuth); FastAPI valida JWT | Tests: sin token 401, token válido 200, email no verificado bloqueado | Flujos probados |
 | 7 | [ ] | Auth en app (T1.4) | RQF 01, RQN 05, RQN 02 | Login/registro mínimo + desbloqueo biométrico local | Registro → verificación → login en emulador; widget tests | Nº de campos (≤ 3) |
