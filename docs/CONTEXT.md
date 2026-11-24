@@ -56,3 +56,5 @@ Garantías:
 - D1 (2026-11-23): Supabase (PostgreSQL + Auth) como BD; Firebase solo para FCM.
 - D2 (2026-11-23): El LLM se usa únicamente para extracción JSON y redacción del Coach.
 - D3 (2026-11-24): Supabase en la nube (no local). Migraciones versionadas en `supabase/migrations/` con la CLI de Supabase. Montos en NUMERIC. RLS activado en todas las tablas. La clave `service_role` vive solo en `backend/.env` (nunca en la app ni en el repo).
+- D4 (2026-11-24): El backend reenvía el JWT del usuario en sus consultas a Supabase, así RLS se aplica también desde el backend. La `service_role` se usa solo en procesos sin usuario (p. ej. la ingesta del Paso 8).
+- D5 (2026-11-24): Solo COP en el MVP; una compra en otra moneda queda `pending_review`. Los ingresos son `transactions` con `direction='income'`. Bolsillos: tabla `pocket_movements` (monto con signo); lo apartado es la suma de sus movimientos, no una columna.
