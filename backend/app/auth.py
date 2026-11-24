@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from time import monotonic
 from typing import Annotated
 
 import httpx
@@ -11,8 +12,13 @@ from app.config import settings
 # Solo firmas asimétricas de Supabase; "none" y HS256 quedan rechazados.
 ALGORITHMS = ["ES256", "RS256"]
 
+JWKS_TTL = 600  # s: las claves en memoria caducan a los 10 min
+KID_REFETCH_INTERVAL = 60  # s: como mucho una recarga por kid desconocido cada 60 s
+
 _bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKSet | None = None
+_loaded_at = 0.0
+_last_kid_refetch = float("-inf")
 
 
 @dataclass(frozen=True)
@@ -31,14 +37,23 @@ def _fetch_jwks() -> jwt.PyJWKSet:
         raise HTTPException(503, "No se pudo obtener el JWKS de Supabase") from e
 
 
+def _load() -> None:
+    global _jwks, _loaded_at
+    _jwks, _loaded_at = _fetch_jwks(), monotonic()
+
+
 def _signing_key(kid: str) -> jwt.PyJWK:
-    global _jwks
-    if _jwks is None:
-        _jwks = _fetch_jwks()
+    global _last_kid_refetch
+    if _jwks is None or monotonic() - _loaded_at > JWKS_TTL:
+        _load()  # caducidad: una clave revocada deja de aceptarse en ≤ 10 min
     try:
         return _jwks[kid]
     except KeyError:
-        _jwks = _fetch_jwks()  # posible rotación de claves: una sola recarga
+        # Posible rotación de claves; limitada para que kid inventados no saturen Supabase.
+        if monotonic() - _last_kid_refetch < KID_REFETCH_INTERVAL:
+            raise
+        _last_kid_refetch = monotonic()
+        _load()
         return _jwks[kid]
 
 

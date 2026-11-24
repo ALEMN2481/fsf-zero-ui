@@ -37,6 +37,10 @@ def make_token(key=KEY, kid="k1", alg="ES256", **overrides):
 def client(monkeypatch):
     monkeypatch.setattr(settings, "supabase_url", URL)
     monkeypatch.setattr(auth, "_jwks", None)
+    monkeypatch.setattr(auth, "_loaded_at", 0.0)
+    monkeypatch.setattr(auth, "_last_kid_refetch", float("-inf"))
+    clock = [1000.0]  # reloj falso: los tests avanzan el tiempo sin dormir
+    monkeypatch.setattr(auth, "monotonic", lambda: clock[0])
     calls = []
 
     def fake_fetch():
@@ -53,7 +57,7 @@ def client(monkeypatch):
         return {"sub": user.id}
 
     c = TestClient(app)
-    c.fetch, c.calls = fake_fetch, calls
+    c.fetch, c.calls, c.clock = fake_fetch, calls, clock
     return c
 
 
@@ -101,3 +105,23 @@ def test_unknown_kid_refetches_once_and_accepts_rotated_key(client):
 def test_unknown_kid_refetches_only_once(client):
     assert get(client, make_token(kid="desconocido")).status_code == 401
     assert len(client.calls) == 2  # carga inicial + una recarga, sin bucle
+
+
+def test_many_unknown_kids_trigger_a_single_refetch(client):
+    assert get(client, make_token()).status_code == 200  # carga inicial
+    for i in range(20):
+        assert get(client, make_token(kid=f"inventado-{i}")).status_code == 401
+    assert len(client.calls) == 2  # carga inicial + una sola recarga por kid
+    client.clock[0] += 61  # pasado el intervalo, se permite otra recarga
+    get(client, make_token(kid="inventado-otra-vez"))
+    assert len(client.calls) == 3
+
+
+def test_cached_keys_expire_after_ttl(client):
+    assert get(client, make_token()).status_code == 200
+    client.clock[0] += 599
+    assert get(client, make_token()).status_code == 200
+    assert len(client.calls) == 1  # dentro de los 10 min, usa la caché
+    client.clock[0] += 2
+    assert get(client, make_token()).status_code == 200
+    assert len(client.calls) == 2  # caducada: vuelve a descargar

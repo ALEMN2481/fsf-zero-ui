@@ -10,6 +10,19 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-24 · Paso 06 (seguimiento) — Recarga del JWKS limitada y con caducidad
+- RQ: RQN 01
+- Cambios:
+  - `backend/app/auth.py`: las claves en memoria caducan a los 10 min (`JWKS_TTL = 600`); la recarga por `kid` desconocido ocurre como mucho una vez cada 60 s (`KID_REFETCH_INTERVAL`); dentro de ese intervalo responde 401 sin descargar.
+  - `backend/app/config.py`: lee `backend/.env` con ruta absoluta relativa al archivo (funciona arrancando desde la raíz).
+  - `backend/tests/test_auth.py`: reloj falso; +2 tests (20 `kid` inventados → una sola recarga y otra tras 61 s; caducidad a los 10 min → nueva descarga).
+- Verificación:
+  - `ruff check backend` → All checks passed
+  - `pytest backend -q` (sin Supabase local) → 15 passed, 3 skipped
+  - Desde la raíz, con un `backend/.env` temporal `APP_ENV=prueba-ruta` → `settings.app_env == "prueba-ruta"` (archivo borrado después)
+- Riesgo resuelto: una clave revocada deja de aceptarse en ≤ 10 min sin reiniciar el backend.
+- Siguiente: plan del Paso 07 (pendiente de aprobación)
+
 ## 2026-11-24 · Paso 06 — Auth backend
 - RQ: RQF 01 (registro, login y verificación), RQN 01 (JWT validado, RLS desde el backend)
 - Reglas: Conventional Commits y confirmación obligatoria para acciones en la nube, en `CLAUDE.md` (e3282bc).
