@@ -55,3 +55,4 @@ Garantías:
 ## Decisiones
 - D1 (2026-11-23): Supabase (PostgreSQL + Auth) como BD; Firebase solo para FCM.
 - D2 (2026-11-23): El LLM se usa únicamente para extracción JSON y redacción del Coach.
+- D3 (2026-11-24): Supabase en la nube (no local). Migraciones versionadas en `supabase/migrations/` con la CLI de Supabase. Montos en NUMERIC. RLS activado en todas las tablas. La clave `service_role` vive solo en `backend/.env` (nunca en la app ni en el repo).

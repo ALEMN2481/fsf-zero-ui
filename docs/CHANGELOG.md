@@ -10,6 +10,12 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-24 · Paso 04 (seguimiento) — Quitar el NDK fijado: NO aplicado
+- Intento: volver a `ndkVersion = flutter.ndkVersion` (28.2.13676358).
+- Verificación: `flutter build apk --debug` → falla; Gradle vuelve a llamar a `sdkmanager` (0xC0000409). En `%LOCALAPPDATA%\Android\Sdk\ndk\` solo existe `30.0.16138531`; el 28.2 no se encuentra en esa ruta ni en otra.
+- Decisión: se revierte el cambio (sin commit de una build rota); el NDK 30 sigue fijado.
+- Siguiente: el supervisor confirma dónde se instaló el NDK 28.2 → reintentar.
+
 ## 2026-11-24 · Paso 04 (cierre) — Timeout de /health y prueba en emulador
 - RQ: RQN 02 (corre en Android), RQN 05 (si el backend no responde, se muestra un mensaje claro en vez de quedarse cargando)
 - Cambios: `app/lib/main.dart` (la llamada a `/health` se corta a los 5 s con `healthTimeout`); `app/test/health_test.dart` (tercer test: el backend no responde → "Backend no disponible"); `app/android/app/build.gradle.kts` (`ndkVersion` fijado al NDK instalado 30.0.16138531, porque Flutter pide 28.2.13676358 y su descarga vía sdkmanager falla)
