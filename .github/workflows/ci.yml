@@ -41,6 +41,13 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.2 # misma versión que el entorno local
       - if: hashFiles('app/pubspec.yaml') != ''
         working-directory: app
-        run: flutter pub get && flutter analyze && flutter test
+        run: flutter pub get
+      - if: hashFiles('app/pubspec.yaml') != ''
+        working-directory: app
+        run: flutter analyze
+      - if: hashFiles('app/pubspec.yaml') != ''
+        working-directory: app
+        run: flutter test
