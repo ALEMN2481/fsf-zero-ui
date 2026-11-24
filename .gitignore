@@ -1,0 +1,21 @@
+# Herramientas locales (no forman parte del proyecto)
+markitdown/
+.serena/
+
+# Secretos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+.venv/
+
+# Flutter / Dart
+.dart_tool/
+build/
+
+# Editores y logs
+.idea/
+.vscode/
+*.log
