@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Los pasos se saltan hasta que exista backend/ (Paso 3).
+      - if: hashFiles('backend/requirements.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: hashFiles('backend/requirements.txt') != ''
+        run: pip install -r backend/requirements.txt ruff pytest
+      - if: hashFiles('backend/requirements.txt') != ''
+        run: ruff check backend
+      - if: hashFiles('backend/requirements.txt') != ''
+        run: pytest backend
+
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Los pasos se saltan hasta que exista app/ (Paso 4).
+      - if: hashFiles('app/pubspec.yaml') != ''
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - if: hashFiles('app/pubspec.yaml') != ''
+        working-directory: app
+        run: flutter pub get && flutter analyze && flutter test
