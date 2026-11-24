@@ -14,7 +14,27 @@ Contexto: docs/CONTEXT.md · Ruta: docs/ROADMAP.md · Bitácora: docs/CHANGELOG.
 - Dinero: NUMERIC/Decimal, nunca float. Todo cálculo de saldos/presupuestos en código o BD (RQN 03).
 - El LLM solo extrae JSON validado por esquema o redacta texto a partir de cifras ya calculadas; nunca calcula.
 - Secretos solo en `.env` (ignorado). Nunca commitear tokens, claves ni correos reales.
-- Commits pequeños: `paso-NN: <qué>`. Push solo tras verificación.
+- Commits pequeños, push solo tras verificación. Formato Conventional Commits
+  (desde 2026-11-24; no reescribir commits ya subidos):
+  - Título: `tipo(ámbito): descripción` en imperativo, en español, sin punto
+    final, ≤ 72 caracteres. Tipos: feat, fix, test, docs, ci, chore, refactor.
+    Ámbitos: app, backend, db, ci, docs.
+  - Cuerpo: qué cambia y por qué, líneas ≤ 72 caracteres.
+  - Pie: `Paso: NN`, `Refs: <RQ>` y `Co-Authored-By`.
+  - Ejemplo:
+    ```
+    feat(backend): valida el JWT de Supabase en rutas protegidas
+
+    Añade una dependencia que verifica firma, expiración y audiencia
+    del token. Sin token o con token inválido responde 401.
+
+    Paso: 06
+    Refs: RQF 01, RQN 01
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+    ```
+- Supabase en la nube: toda acción contra el proyecto remoto (push, consultas,
+  `--remote`, `--yes`, creación de usuarios) requiere confirmación explícita
+  del supervisor antes de ejecutarla.
 - Si una decisión cambia la arquitectura: registrarla en CONTEXT.md §Decisiones.
 
 ## Al cerrar cada entrega (reporte obligatorio)
