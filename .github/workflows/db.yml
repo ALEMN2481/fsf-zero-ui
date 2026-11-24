@@ -3,9 +3,9 @@ name: DB
 on:
   push:
     branches: [main]
-    paths: ["supabase/**", ".github/workflows/db.yml"]
+    paths: ["supabase/**", "backend/**", ".github/workflows/db.yml"]
   pull_request:
-    paths: ["supabase/**", ".github/workflows/db.yml"]
+    paths: ["supabase/**", "backend/**", ".github/workflows/db.yml"]
 
 jobs:
   db:
@@ -15,6 +15,16 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 3.3.0 # misma versión que la CLI local
-      # Solo base de datos + auth: lo necesario para migraciones y RLS.
-      - run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,supavisor,mailpit,postgres-meta
+      # db + auth + mailpit (el registro con confirmación de correo envía un email).
+      - run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta
       - run: supabase test db
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements.txt pytest
+      # Claves de desarrollo del stack local (no son secretos del proyecto en la nube).
+      - name: Pruebas de integración del backend
+        run: |
+          eval "$(supabase status -o env)"
+          REQUIRE_SUPABASE=1 SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" \
+            SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" pytest backend -v

@@ -21,10 +21,12 @@ ANON = os.getenv("SUPABASE_ANON_KEY", "")
 SERVICE = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 PASSWORD = "clave-de-prueba-1"
 
-pytestmark = pytest.mark.skipif(
-    not (ANON and SERVICE and ("127.0.0.1" in URL or "localhost" in URL)),
-    reason="requiere Supabase local (supabase start)",
-)
+LOCAL_READY = bool(ANON and SERVICE and ("127.0.0.1" in URL or "localhost" in URL))
+# En la tarea db de la CI se exige el stack local: saltarse sería un falso verde.
+if os.getenv("REQUIRE_SUPABASE") and not LOCAL_READY:
+    raise RuntimeError("REQUIRE_SUPABASE=1 pero no hay Supabase local configurado")
+
+pytestmark = pytest.mark.skipif(not LOCAL_READY, reason="requiere Supabase local (supabase start)")
 
 
 def admin(method, path, **kw):
