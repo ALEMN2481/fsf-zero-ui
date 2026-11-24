@@ -10,7 +10,24 @@
 - Siguiente: Paso NN+1
 -->
 
-## 2026-11-24 · Paso 05 — Modelo de datos en Supabase (EN CURSO: falta aplicarlo en la nube)
+## 2026-11-24 · Paso 05 (cierre) — Verificación en la nube y CI de base de datos
+- RQ: RQN 01, RQN 03
+- Nube: el supervisor aplicó la migración con `npx supabase db push` en el proyecto `hztlemmvferfogybwlsd`.
+- Cambios: `.github/workflows/db.yml` (nuevo): tarea `db`, se activa solo cuando cambia `supabase/**`; ejecuta CLI 3.3.0 → `supabase start` (solo db + auth) → `supabase test db`.
+- Verificación:
+  - `npx supabase test db --remote --yes` → NO ejecutable: la CLI instala pgtap temporalmente y su rol de login no encuentra `plan(integer)` (en `pg_extension` del proyecto no queda pgtap). No se cambiaron permisos en producción.
+  - Alternativa, `npx supabase db query --remote` (solo lectura) → RLS `true` en accounts, budgets, categories, pocket_movements, pockets, profiles, transactions; `numeric(14,2)` en budgets.amount, pocket_movements.amount, pockets.target_amount, transactions.amount; 6 categorías globales (Alimentos, Entretenimiento, Otros, Salud, Servicios, Transporte); migración `20261124035811 init_schema` registrada.
+  - CI → CI: success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45485274816 · DB: success (`supabase start` y `supabase test db` en verde) https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45485274829
+  - `npx supabase stop` → 0 contenedores de Supabase en marcha.
+- Commits: 21ea2be (migración + tests), 8a871df (tarea db)
+- Pendientes para pasos futuros:
+  - Paso 06: exigir contraseña mínima de 8 caracteres (hoy `minimum_password_length = 6` en `supabase/config.toml` y el valor por defecto en el proyecto de la nube).
+  - Paso 11: validar que un retiro de bolsillo no deje lo apartado en negativo (hoy `pocket_movements` solo exige amount ≠ 0).
+  - Paso 11: contar los días del presupuesto en hora de Colombia (America/Bogota), no en UTC.
+- Riesgos: los 27 tests de RLS se ejecutan en local y en la CI, pero no contra la nube; allí solo se verificó la estructura.
+- Siguiente: Paso 06 — Auth backend (no iniciado)
+
+## 2026-11-24 · Paso 05 — Modelo de datos en Supabase (luego cerrado, ver entrada superior)
 - RQ: RQN 03 (montos NUMERIC(14,2), sin saldos guardados), RQN 01 (RLS en las 7 tablas; FKs compuestas)
 - Decisiones: D3, D4, D5 en `docs/CONTEXT.md`
 - Cambios: `supabase/config.toml` + `supabase/.gitignore` (`supabase init`); `supabase/migrations/20261124035811_init_schema.sql`:
