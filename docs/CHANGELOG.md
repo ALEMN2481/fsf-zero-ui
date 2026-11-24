@@ -10,6 +10,23 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-24 · Paso 05 — Modelo de datos en Supabase (EN CURSO: falta aplicarlo en la nube)
+- RQ: RQN 03 (montos NUMERIC(14,2), sin saldos guardados), RQN 01 (RLS en las 7 tablas; FKs compuestas)
+- Decisiones: D3, D4, D5 en `docs/CONTEXT.md`
+- Cambios: `supabase/config.toml` + `supabase/.gitignore` (`supabase init`); `supabase/migrations/20261124035811_init_schema.sql`:
+  - tablas `profiles` (trigger al registrarse en `auth.users`), `accounts`, `categories` (6 globales sembradas), `transactions`, `budgets`, `pockets`, `pocket_movements`;
+  - CHECK en kind, direction, source, status, last4 y montos; UNIQUE NULLS NOT DISTINCT (user_id, name) en categories; índice único parcial (user_id, source_ref);
+  - FK compuestas (account_id, user_id) → accounts y (pocket_id, user_id) → pockets; exclusión de periodos solapados en budgets (btree_gist);
+  - políticas: solo filas propias; en transactions, insert/update solo con categorías globales o propias.
+  - `supabase/tests/rls_test.sql` (pgTAP, 27 pruebas con usuarios A y B).
+- Verificación (stack local en Docker, mismas migraciones que irán a la nube):
+  - `npx supabase db reset` → Applying migration 20261124035811_init_schema.sql… Finished
+  - `npx supabase test db` → Files=1, Tests=27, Result: PASS
+  - Consulta: tablas de `public` sin RLS = 0; columnas de monto que no son numeric = 0
+- Commit: 21ea2be
+- Pendientes/riesgos: falta `supabase link` + `supabase db push` al proyecto en la nube (requiere `npx supabase login` del supervisor y el project ref). Los tests de BD no corren en la CI (solo en local). Las categorías globales sembradas (Servicios, Salud, Otros además de las 3 del documento) son una propuesta.
+- Siguiente: aplicar en la nube → cerrar Paso 05 → Paso 06 (Auth backend)
+
 ## 2026-11-24 · Paso 04 (seguimiento) — Quitar el NDK fijado: NO aplicado
 - Intento: volver a `ndkVersion = flutter.ndkVersion` (28.2.13676358).
 - Verificación: `flutter build apk --debug` → falla; Gradle vuelve a llamar a `sdkmanager` (0xC0000409). En `%LOCALAPPDATA%\Android\Sdk\ndk\` solo existe `30.0.16138531`; el 28.2 no se encuentra en esa ruta ni en otra.
