@@ -1,0 +1,20 @@
+name: DB
+
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/**", ".github/workflows/db.yml"]
+  pull_request:
+    paths: ["supabase/**", ".github/workflows/db.yml"]
+
+jobs:
+  db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.3.0 # misma versión que la CLI local
+      # Solo base de datos + auth: lo necesario para migraciones y RLS.
+      - run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,supavisor,mailpit,postgres-meta
+      - run: supabase test db
