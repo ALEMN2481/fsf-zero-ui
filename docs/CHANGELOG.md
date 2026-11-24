@@ -10,6 +10,32 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-24 · Paso 06 — Auth backend
+- RQ: RQF 01 (registro, login y verificación), RQN 01 (JWT validado, RLS desde el backend)
+- Reglas: Conventional Commits y confirmación obligatoria para acciones en la nube, en `CLAUDE.md` (e3282bc).
+- Cambios:
+  - `supabase/config.toml`: `minimum_password_length = 8`, `[auth.email] enable_confirmations = true` (entorno local y CI).
+  - `backend/app/auth.py` (nuevo): dependencia `current_user`. Valida la firma con el JWKS, `exp`, `aud=authenticated` e `iss=<SUPABASE_URL>/auth/v1`. Solo acepta ES256/RS256 (rechaza `none` y HS256). Con un `kid` desconocido recarga el JWKS una sola vez.
+  - `backend/app/main.py`: `GET /me` y `GET /accounts`. Consultan la API REST de Supabase con la clave anon y el JWT del usuario, sin `service_role`; `/accounts` no filtra por usuario, el aislamiento lo hace RLS (D4).
+  - `backend/app/config.py` y `.env.example`: `SUPABASE_URL`, `SUPABASE_ANON_KEY`. `requirements.txt`: `pyjwt[crypto]`.
+  - `backend/tests/test_auth.py`: 12 tests sin red (válido, sin token, firma inválida, caducado, audiencia incorrecta, emisor incorrecto, alg HS256, alg none, malformado, alg no permitido sin descargar el JWKS, rotación de `kid`, una sola recarga).
+  - `backend/tests/test_api_two_users.py`: A y B vía API contra Supabase local (solo corre si la URL es local), contraseña de 7 caracteres → `weak_password`, correo sin confirmar → `email_not_confirmed`.
+  - `.github/workflows/db.yml`: también se activa con `backend/**`, ya no excluye mailpit, corre pytest con `REQUIRE_SUPABASE=1`.
+- Nube:
+  - JWKS público del proyecto `hztlemmvferfogybwlsd` → HTTP 200, una clave `ES256` (EC P-256); consulta autorizada por el supervisor.
+  - Contraseña mínima de 8 y confirmación de correo: **configuradas a mano por el supervisor en el panel** (sin `config push`; no verificado por el agente).
+- Verificación:
+  - `ruff check backend` → All checks passed
+  - Con Supabase local: `pytest backend -v` → 16 passed; sin Supabase local → 13 passed, 3 skipped; sin Supabase local y con `REQUIRE_SUPABASE=1` → error (no hay falso verde).
+  - CI → CI success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45496603951 · DB success (supabase test db + "Pruebas de integración del backend") https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45496603987
+  - `npx supabase stop` → 0 contenedores.
+- Commits: e3282bc, bcc842b, ff77ea8, dbf3311, ab64bf2, 5519729
+- Pendientes:
+  - Paso 07: inicio de sesión con Google (necesita un cliente OAuth de Google y activar el proveedor en Supabase) y acceso biométrico, ambos desde la app.
+  - Paso 16: prueba de dos usuarios contra la nube (no se crearon usuarios en la nube, por decisión del supervisor).
+- Riesgos: el JWKS se guarda en memoria sin caducidad; las claves nuevas se recogen por la recarga ante un `kid` desconocido, pero una clave revocada seguiría aceptándose hasta reiniciar el backend. El límite local de correos (`[auth.rate_limit] email_sent`) puede frenar ejecuciones repetidas del test de correo sin confirmar.
+- Siguiente: Paso 07 — Auth en la app (no iniciado)
+
 ## 2026-11-24 · Paso 05 (cierre) — Verificación en la nube y CI de base de datos
 - RQ: RQN 01, RQN 03
 - Nube: el supervisor aplicó la migración con `npx supabase db push` en el proyecto `hztlemmvferfogybwlsd`.
