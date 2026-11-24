@@ -7,7 +7,8 @@ plugins {
 android {
     namespace = "co.finanzassinfiltro.fsf_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // shortcut: NDK instalado localmente (Flutter pide 28.2.13676358 y su descarga vía sdkmanager falla); volver a flutter.ndkVersion si se instala ese NDK.
+    ndkVersion = "30.0.16138531"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

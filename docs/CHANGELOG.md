@@ -10,7 +10,15 @@
 - Siguiente: Paso NN+1
 -->
 
-## 2026-11-23 · Paso 04 — Esqueleto Flutter (EN CURSO: falta la prueba en emulador)
+## 2026-11-24 · Paso 04 (cierre) — Timeout de /health y prueba en emulador
+- RQ: RQN 02 (corre en Android), RQN 05 (si el backend no responde, se muestra un mensaje claro en vez de quedarse cargando)
+- Cambios: `app/lib/main.dart` (la llamada a `/health` se corta a los 5 s con `healthTimeout`); `app/test/health_test.dart` (tercer test: el backend no responde → "Backend no disponible"); `app/android/app/build.gradle.kts` (`ndkVersion` fijado al NDK instalado 30.0.16138531, porque Flutter pide 28.2.13676358 y su descarga vía sdkmanager falla)
+- Verificación: `flutter analyze` → No issues found; `flutter test` → 3 passed; `flutter build apk --debug` → APK generada; `flutter run -d emulator-5554` (Android 17, API 37) con el backend en `0.0.0.0:8000` → el emulador muestra "Backend conectado" y el log del backend registra `GET /health 200` desde la app
+- Commit: (ver git log, `paso-04: timeout /health…`)
+- Pendientes/riesgos: el NDK fijado depende de esta máquina (marcado `shortcut:` en el código). El emulador de API 37 perdió una vez su servicio `package` y hubo que reiniciarlo. iOS sigue sin probar (no hay Mac; hará falta una excepción de ATS para http).
+- Siguiente: Paso 05 — Modelo de datos en Supabase
+
+## 2026-11-23 · Paso 04 — Esqueleto Flutter (luego cerrado el 2026-11-24, ver entrada superior)
 - RQ: RQN 02 (solo plataformas Android + iOS), RQN 05 (una sola pantalla con un mensaje)
 - Cambios: `app/` creada con `flutter create --empty` (paquete `fsf_app`, org `co.finanzassinfiltro`) + dependencia `http`; `app/lib/main.dart` (pantalla que llama a `GET /health`; URL configurable con `--dart-define=API_URL`, por defecto `http://10.0.2.2:8000`); `app/test/health_test.dart` (2 widget tests con un cliente HTTP simulado); `app/android/app/src/debug/AndroidManifest.xml` (permite http solo en debug); `.github/workflows/ci.yml` (Flutter fijado en 3.47.2; pub get, analyze y test como pasos separados)
 - Verificación: `flutter analyze` → No issues found; `flutter test` → 2 passed; CI → success con las 3 tareas ejecutando de verdad — https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45300603470

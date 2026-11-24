@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fsf_app/main.dart';
 import 'package:http/http.dart' as http;
@@ -15,6 +17,14 @@ void main() {
     final client = MockClient((_) async => throw http.ClientException('sin red'));
     await tester.pumpWidget(MainApp(client: client));
     await tester.pumpAndSettle();
+    expect(find.text('Backend no disponible'), findsOneWidget);
+  });
+
+  testWidgets('muestra no disponible si el backend no responde a tiempo', (tester) async {
+    final client = MockClient((_) => Completer<http.Response>().future); // nunca responde
+    await tester.pumpWidget(MainApp(client: client));
+    expect(find.text('Conectando…'), findsOneWidget);
+    await tester.pump(healthTimeout + const Duration(seconds: 1));
     expect(find.text('Backend no disponible'), findsOneWidget);
   });
 }

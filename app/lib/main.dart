@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 // 10.0.2.2 = localhost del PC visto desde el emulador Android. Otro destino: --dart-define=API_URL=...
 const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:8000');
 
+const healthTimeout = Duration(seconds: 5);
+
 void main() => runApp(MainApp(client: http.Client()));
 
 class MainApp extends StatelessWidget {
@@ -32,7 +34,7 @@ class MainApp extends StatelessWidget {
   }
 
   Future<String> _checkHealth() async {
-    final res = await client.get(Uri.parse('$apiUrl/health'));
+    final res = await client.get(Uri.parse('$apiUrl/health')).timeout(healthTimeout);
     final status = jsonDecode(res.body)['status'];
     return res.statusCode == 200 && status == 'ok' ? 'Backend conectado' : 'Backend no disponible';
   }
