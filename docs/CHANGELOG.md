@@ -10,6 +10,21 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 12 (parte 1) — Pantalla «Disponible diario»: código y tests
+- RQ: RQF 04, RQF 05, RQN 05, RQN 02, RQN 03, RQN 01. Decisión **D13** (`CONTEXT.md`).
+- Nube: `migration list --linked` tras el `db push --remote` del supervisor → **sigue solo con la migración inicial**; no se ejecutó nada más contra la nube.
+- Cambios:
+  - Migración `20261125050000_daily_screen.sql` (`9ed6d40`): `transactions.status` admite `dismissed`; `transactions` en la publicación `supabase_realtime`. pgTAP `daily_screen_test.sql` (3).
+  - Backend (`d895180`): `GET /movements` (últimos, sin descartados, con el tipo del motor y montos como texto); `POST /transactions/{id}/confirm` y `/dismiss` (solo los `pending_review`; 404 si no es del usuario, 409 si no está por confirmar); `POST /budgets` con solo `{amount}` → mes en curso (lo crea o cambia el monto); renovación del presupuesto en `/gps` (`periodo.renovado`); `GET /budgets/suggestion` (`sugerido` = gasto del mes anterior, `ingresos_mes_anterior` como referencia); el motor y el cruce factura/banco excluyen `dismissed`. `scripts/demo_seed.py`: datos de demostración solo en local.
+  - App (`339e6b4`): `money.dart` (formato desde el texto, `BigInt` para comparar, nada de double), `api.dart`, pantalla principal (cifra grande, semana, libre del mes, «por confirmar», efecto GPS solo cuando un exceso baja el diario, texto neutral en negativo), hoja del movimiento (categoría con un toque, confirmar, «No es un gasto mío»), presupuesto con 1 campo (prellenado con el gasto del mes anterior y las dos referencias), bolsillos (crear con 2 campos y la meta oculta, apartar/retirar con 1, sugerencia «Apartar $X» ante el 409), Realtime + refresco al volver, capa de privacidad, `FLAG_SECURE` en release (`MainActivity.kt`).
+- Verificación:
+  - `flutter analyze` → No issues found; `flutter test` → **57 passed**: `money_test.dart` (26: grandes, negativos, centavos, `-0`, 20 cifras sin pérdida, entradas del usuario válidas e inválidas); `home_test.dart` (20: pantallas 1–6, negativo sin palabras de juicio, nº de campos 1/2/1, sugerencia del máximo, Realtime y vuelta a la app refrescan, error con reintento, **sin `Table`/`DataTable`/paquetes de gráficas**, **texto al 200 % sin desbordes en principal, pasado, sin presupuesto, hoja y bolsillos**, `androidTapTargetGuideline` (48×48), `labeledTapTargetGuideline`, `textContrastGuideline`); `auth_test.dart` (11, con la capa de privacidad y su estilo).
+  - Fallos encontrados por los tests y corregidos: `setState` que devolvía un Future en bolsillos; la capa de privacidad sin `Material` salía con el estilo de emergencia de Flutter (texto rojo, 48 px, subrayado amarillo; visto en el emulador). Mutación verificada: sin `Material` el test falla.
+  - Backend: `test_daily_api.py` (4) + 3 unitarios (mes, renovación, referencia) → pasan; `npx supabase test db` → PASS (69); ruff OK. Suite completa con Supabase local → 268 passed y 21 errores **por los datos de demostración** (el usuario demo tiene el Gmail de prueba, que es único); sin Supabase → `260 passed, 29 skipped`.
+- **Pendiente para cerrar el paso: capturas de las pantallas 1–6 en el emulador.** El emulador Pixel_8 (API 37) falló: tras instalar la APK, el gestor de paquetes no encuentra `MainActivity` y la pantalla sale negra, también tras reiniciar y con arranque en frío (ya le pasó en el Paso 4). Antes del fallo se vieron la pantalla sin presupuesto y el estado vacío con «Conectar correo» y las cifras correctas ($ 1.200.000 / 6 días → $ 200.000 hoy).
+- Pendientes/riesgos: capturas; comprobar `FLAG_SECURE` con una build de release; borrar los usuarios demo locales (con confirmación) y repetir la suite; sincronizar la nube (6 migraciones, con la de Realtime).
+- Siguiente: capturas de las pantallas 1–6 y cierre del Paso 12.
+
 ## 2026-11-25 · Paso 11 — Motor financiero GPS
 - RQ: RQF 04, RQF 05, RQN 03, RQN 01. Decisión **D12**; fórmulas en `CONTEXT.md` §Motor financiero GPS.
 - Cambios:
