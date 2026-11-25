@@ -9,8 +9,6 @@ Crea dos usuarios confirmados (nunca en la nube):
 - vacio-<sufijo>@test.local: sin presupuesto ni movimientos (estado vacío).
 --overspend añade a ese usuario una compra de hoy que supera su diario (efecto GPS).
 Necesita SUPABASE_URL, SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY del stack local.
-Mientras exista el usuario demo, los tests de integración que conectan el mismo Gmail de prueba
-fallan por clave duplicada (gmail_connections.gmail_address es única): bórralo al terminar.
 """
 
 import base64
@@ -32,7 +30,8 @@ from app.ingest.store import ingest
 
 PASSWORD = "clave-demo-1234"
 SAMPLES = Path(__file__).parent.parent / "tests" / "samples" / "supervisor"
-GMAIL = "cliente.ejemplo@gmail.com"  # comprador de las facturas simuladas
+# Comprador de las facturas simuladas; la +etiqueta hace única la dirección sin cambiar el buzón.
+GMAIL = "cliente.ejemplo+demo-{}@gmail.com"
 
 
 def _service(method: str, path: str, **kw) -> httpx.Response:
@@ -116,7 +115,7 @@ def main(argv: list[str]) -> None:
     suffix = uuid.uuid4().hex[:6]
 
     demo = _user(f"demo-{suffix}@test.local")
-    _rest("POST", "gmail_connections", {"user_id": demo, "gmail_address": GMAIL,
+    _rest("POST", "gmail_connections", {"user_id": demo, "gmail_address": GMAIL.format(suffix),
           "key_version": 1, "refresh_token_encrypted": "\\x00"})  # fmt: skip
     _rest(
         "POST",

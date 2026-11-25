@@ -20,6 +20,14 @@ pytestmark = requires_local
 
 SUP = Path(__file__).parent / "samples" / "supervisor"
 GMAIL = "cliente.ejemplo@gmail.com"  # comprador de las facturas del supervisor
+
+
+def unique_gmail() -> str:
+    """Mismo buzón que GMAIL (Gmail ignora la +etiqueta al comparar con el comprador), pero una
+    dirección distinta por test: gmail_address es única y la base puede tener otros datos."""
+    return f"cliente.ejemplo+{uuid.uuid4().hex[:8]}@gmail.com"
+
+
 ALERTS = dict(
     re.findall(
         r"\[(A\d+)\]\nAsunto:[^\n]*\n(.*?)(?=\n-----|\Z)",
@@ -54,7 +62,7 @@ def env(users, monkeypatch):
         "gmail_connections",
         json={
             "user_id": a["id"],
-            "gmail_address": GMAIL,
+            "gmail_address": unique_gmail(),
             "key_version": 1,
             "refresh_token_encrypted": "\\x00",
         },
@@ -129,7 +137,7 @@ def test_alert_then_invoice_is_one_completed_movement(env, caplog):
     assert tx["account_id"] == account_id and tx["source_ref"].startswith("bank:")
     assert re.fullmatch(r"[0-9a-f]{96}", tx["invoice_cufe"])
     assert statuses(user_id) == ["extracted", "extracted"]
-    for secret in ("SUPERMERCADO", "45.900", "45900", GMAIL, "*1111"):
+    for secret in ("SUPERMERCADO", "45.900", "45900", "cliente.ejemplo", "*1111"):
         assert secret not in caplog.text  # los logs solo llevan ids, plantilla y motivo
 
 
