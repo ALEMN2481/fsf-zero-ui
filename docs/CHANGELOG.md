@@ -10,6 +10,30 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-24 · Paso 07 (Parte B y cierre) — Google OAuth y ajustes
+- RQ: RQF 01, RQN 01, RQN 02, RQN 05
+- Hecho a mano por el supervisor (sin verificar por el agente, salvo lo que se prueba en local): cliente OAuth "Aplicación web" en Google Cloud; Google activado en el Supabase de la nube; `co.finanzassinfiltro.fsfapp://login-callback` en Redirect URLs de la nube; `supabase/.env` con las credenciales (no leído por el agente).
+- Cambios:
+  - `app/lib/auth_screen.dart`: botón "Continuar con Google" → `getOAuthSignInUrl(google, redirectTo: enlace de la app)` (PKCE) y lo abre en el navegador externo; el formulario sigue con 2 campos.
+  - `supabase/config.toml`: `[auth.external.google]` con `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID/SECRET)`. `.github/workflows/db.yml`: valores ficticios para que `supabase start` arranque en la CI.
+  - Nombre de la app: "Finanzas Sin Filtro" (`android:label` y `CFBundleDisplayName`).
+  - Diálogo de desbloqueo en español con `AndroidAuthMessages` e `IOSAuthMessages` (`local_auth_android`, `local_auth_darwin` y `url_launcher` pasan a dependencias directas; mismas versiones que ya venían).
+  - `app/lib/home_screen.dart`: `/me` espera hasta 10 s (`meTimeout`).
+  - Tests: Google abre `/auth/v1/authorize` con `provider=google` y `redirect_to` de la app; el diálogo recibe los textos en español; `/me` responde a los 7 s → verificada; sin respuesta a los 10 s → no verificada.
+- Verificación:
+  - `flutter analyze` → No issues found · `flutter test` → 15 passed.
+  - Supabase local reiniciado: `/auth/v1/settings` → `google: true`; `/authorize?provider=google` → 302 a `accounts.google.com` con `redirect_uri=http://127.0.0.1:54321/auth/v1/callback` y el `client_id` resuelto desde `supabase/.env`.
+  - Emulador: diálogo de desbloqueo con título "Finanzas Sin Filtro", "Usa tu huella o el bloqueo de pantalla" y "Desbloquea la app para ver tu información"; los botones "Cancel"/"Use PIN" los pone Android según el idioma del sistema (emulador en inglés).
+  - Google de punta a punta (el supervisor escribió su cuenta en el emulador): primer intento → `400: OAuth state has expired` (pasaron ~11 min entre abrir la página y volver) y Chrome acabó en la Site URL `127.0.0.1:3000`, que no existe. Segundo intento → `/callback` 302 → `/token` 200 (`pkce`) → la app muestra "Backend conectado" y "Sesión verificada"; backend `/me` 200; en la BD local hay un usuario con identidad `google` y correo confirmado.
+  - CI (a9abae2) → CI success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45528604670 · DB success (con los valores ficticios de Google) https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45528604820
+- Commits: a9abae2
+- Pendientes:
+  - Antes del Paso 16 (en `ROADMAP.md`): "Olvidé mi contraseña"; dar destino a la Site URL para errores de OAuth.
+  - Paso 12 (en `ROADMAP.md`): ocultar la app en la pantalla de recientes (`FLAG_SECURE`) cuando muestre datos reales.
+  - Paso 16: Google y registro contra la nube (no se probó; solo local).
+- Riesgos: si el usuario tarda varios minutos en Google, el estado de OAuth caduca y no vuelve a la app (ver pendiente de la Site URL). Paso 08: `gmail.readonly` es un permiso restringido (anotado en la Parte A).
+- Siguiente: Paso 08 — Recepción de correos (no iniciado; el supervisor revisará antes su plan)
+
 ## 2026-11-24 · Paso 07 (Parte A) — Acceso con correo, sesión cifrada y bloqueo local
 - RQ: RQF 01, RQN 01, RQN 02, RQN 05
 - Antes de empezar:

@@ -11,7 +11,7 @@ Cada paso: **RQ** que cubre · **Construir** (acotado) · **Verificar** antes de
 | 4 | [x] 2026-11-24 · f5865f5 | Esqueleto Flutter (T1.2) | RQN 02, RQN 05 | `app/` Flutter, 1 pantalla que llama `/health` | `flutter test`; corre en emulador Android (iOS si hay Mac) | Plataformas probadas |
 | 5 | [x] 2026-11-24 · 8a871df | Modelo de datos en Supabase (T1.3) | RQN 03, RQN 01 | Migraciones: perfil, cuentas, transacciones, categorías, presupuestos, bolsillos; montos NUMERIC; RLS | Migraciones aplican en limpio; test RLS: usuario A no lee datos de B | Lista de tablas |
 | 6 | [x] 2026-11-24 · 5519729 | Auth backend (T1.4) | RQF 01, RQN 01 | Supabase Auth (email + Google OAuth); FastAPI valida JWT | Tests: sin token 401, token válido 200, email no verificado bloqueado | Flujos probados |
-| 7 | [~] Parte A hecha | Auth en app (T1.4) | RQF 01, RQN 05, RQN 02 | Login/registro mínimo + desbloqueo biométrico local | Registro → verificación → login en emulador; widget tests | Nº de campos (≤ 3) |
+| 7 | [x] 2026-11-24 · a9abae2 | Auth en app (T1.4) | RQF 01, RQN 05, RQN 02 | Login/registro mínimo + desbloqueo biométrico local | Registro → verificación → login en emulador; widget tests | Nº de campos (≤ 3) |
 | 8 | [ ] | Recepción de correos (T2.1) | RQF 02, RQN 01 | OAuth al correo (solo lectura), filtro de remitentes bancarios/DIAN, tokens cifrados | Correo de prueba recibido y guardado; sin tokens en logs | Remitentes soportados |
 | 9 | [ ] | Extracción vía MCP + LLM (T2.2) | RQF 02, RQN 03 | Servidor MCP de extracción; JSON validado por esquema; ambiguo → "por aclarar" | ≥ 10 correos anonimizados: precisión por campo medida; JSON inválido nunca llega a la BD | % de aciertos por campo |
 | 10 | [ ] | Categorización (T2.3) | RQF 03 | Reglas por comercio primero, LLM de respaldo; categoría editable | Tests con comercios conocidos; toda transacción con categoría | Tabla de reglas |
@@ -24,6 +24,10 @@ Cada paso: **RQ** que cubre · **Construir** (acotado) · **Verificar** antes de
 
 ## Pendientes que deben cerrarse antes del Paso 16
 - "Olvidé mi contraseña" (RQF 01): enviar el correo de recuperación y abrir la app con el enlace `co.finanzassinfiltro.fsfapp://login-callback` para fijar la nueva contraseña. Quedó fuera del Paso 7 por decisión del supervisor.
+- Site URL de Supabase (local y nube): si el inicio con Google falla antes de saber a qué app volver (p. ej. `OAuth state has expired` por tardar varios minutos), Supabase redirige a la Site URL; hoy esa página no existe y el usuario ve un error de conexión. Darle un destino que explique qué hacer.
+
+## Pendientes para pasos concretos
+- Paso 12: ocultar el contenido de la app en la pantalla de recientes (`FLAG_SECURE` en Android, vista de privacidad en iOS) cuando muestre datos reales.
 
 ## Cobertura de requerimientos
 - RQF 01 → 6, 7 · RQF 02 → 8, 9, 14 · RQF 03 → 10 · RQF 04 → 11, 12, 13 · RQF 05 → 11
