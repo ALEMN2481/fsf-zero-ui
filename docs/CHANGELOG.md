@@ -10,6 +10,23 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 09B — Alertas de Bancolombia, escritura en transactions y doble conteo
+- RQ: RQF 02, RQN 01, RQN 03
+- Antes del 9B: el total del XML usa el mismo rango que `parse_cop` (`MAX_AMOUNT`, cabe en `numeric(14,2)`); fuera de él → `pending_review` (`d535e97`).
+- Conjunto independiente del supervisor en `backend/tests/samples/supervisor/` (16 alertas y 6 facturas simuladas + `esperado.json`), subido tal como lo entregó (`54fc1e9`). Único cambio, por decisión del supervisor (`79ec137`): A05 retiro y A14 avance → gasto (`confirmed`); A11 pago de la propia tarjeta de crédito → `no_movement` (sus compras ya se cuentan una a una).
+- Cambios:
+  - Migración `20261125020000_extraction.sql`: `transactions.payment_method` (lista cerrada) e `invoice_cufe` (SHA-384, único por usuario); `inbound_emails.status` admite `pending_review`. pgTAP `extraction_test.sql` (5).
+  - `backend/app/extract/bancolombia.py` — 13 plantillas (compra nueva y antigua, retiro, avance, transferencia enviada y recibida, nómina, PSE, factura, QR, devolución; sin movimiento: pago de la tarjeta y compra rechazada). Comparan sin tildes ni mayúsculas, pero los datos salen del texto original. Tiene que encajar **exactamente una** vez una sola plantilla; el monto pasa por `parse_cop`, la fecha por `strptime` y el comercio debe tener 1–80 caracteres sin comas. Cualquier otra cosa → `pending_review` (sin plantilla, varias coincidencias, monto, fecha). Solo `$` (COP): USD u otra moneda no encaja.
+  - `backend/app/extract/pipeline.py` — tras guardar el correo (`store.ingest`), crea o completa el movimiento con service_role. Doble conteo, en los dos órdenes de llegada: la factura completa el gasto del banco sin factura con el mismo monto exacto y fecha (en Colombia) a ±1 día (le pone el CUFE y la razón social); si la factura llega antes y se pagó con tarjeta, transferencia u otro medio, queda un movimiento `pending_review` que la alerta completa y confirma al llegar; con varios candidatos → `pending_review`; en efectivo y sin alerta → movimiento nuevo confirmado. Cuenta por los 4 últimos dígitos si hay exactamente una. Un fallo de la extracción no pierde el correo (queda `pending_extraction`, log solo con el tipo de error).
+  - `backend/app/main.py` — `httpcore` en WARNING: en DEBUG registraba las cabeceras de respuesta, que repiten la URL con los filtros (el monto). Lo detectó el test de logs.
+  - Tests: `test_extract_supervisor.py` (recorre todo `esperado.json`, imprime la precisión por campo y rompe la CI solo si se confirma un movimiento con monto equivocado o que no debía confirmarse), `test_extract_bancolombia.py` (13 variantes inventadas por el desarrollador que deben ir a revisión), `test_extract_store.py` (integración con Supabase local: los dos órdenes A02/F01 y los casos sin movimiento o en revisión; logs sin comercio, monto ni correo). `test_ingest_store.py`: las muestras del 08A ahora quedan `pending_review` (no siguen ninguna plantilla).
+- Verificación:
+  - Precisión contra el conjunto del supervisor: estado 22/22; dirección, monto, comercio, fecha, últimos 4 dígitos 13/13; medio de pago 17/17; total de factura 6/6; NIT 3/3; **confirmados con monto equivocado: 0**. F01 completa A02; F03 queda `pending_review`. Ojo: las plantillas se diseñaron a partir de estas mismas alertas, así que mide ajuste, no generalización.
+  - Mutaciones detectadas: tarjeta sin alerta que crea movimiento (3 fallos), varios candidatos que toman el primero (1), sin control de varias coincidencias (1), aceptar USD (2).
+  - Backend con Supabase local → `166 passed`; sin Supabase → `157 passed, 9 skipped`; `npx supabase test db` → 50 PASS; ruff check/format OK.
+- Pendientes/riesgos: formatos de alertas y estructura de la factura sin confirmar contra correos reales (ROADMAP); sin bloqueo entre avisos simultáneos del mismo usuario (`shortcut:` en `pipeline.process`); un usuario podría poner a mano un `invoice_cufe` en un movimiento manual y bloquear el registro de esa factura (solo se afecta a sí mismo); la precisión de las alertas reales se medirá cuando lleguen.
+- Siguiente: Paso 09C (LLM de respaldo y servidor MCP mínimo), tras la aprobación del supervisor y la elección del modelo.
+
 ## 2026-11-25 · Paso 09A — Facturas DIAN seguras y montos colombianos a Decimal
 - RQ: RQF 02, RQN 01, RQN 03
 - Decisión: **D9** (`CONTEXT.md`): la extracción es un módulo dentro del backend (`app/extract/`); como el documento del proyecto exige MCP, se añadirá un servidor MCP mínimo para la demostración sobre el mismo módulo (9C), fuera del camino del correo.
