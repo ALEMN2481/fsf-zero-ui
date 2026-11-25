@@ -6,6 +6,7 @@ comprobaciones contra el texto del correo (el monto y los 4 dígitos deben apare
 devuelve queda en 'pending_review': en las pruebas confundió gasto/ingreso y el medio de pago.
 """
 
+import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -82,15 +83,14 @@ def prompt(text: str, examples: bool = USE_EXAMPLES) -> str:
     return f"{shots}Alerta: {text}\nJSON:"
 
 
-def ask(text: str, *, model: str | None = None, examples: bool = USE_EXAMPLES) -> str:
-    """Llama a Ollama y devuelve el JSON en texto (sin validar). Lanza httpx.HTTPError."""
+def _generate(system: str, text: str, schema: dict, model: str | None) -> str:
     r = httpx.post(
         f"{settings.ollama_url}/api/generate",
         json={
             "model": model or settings.ollama_model,
-            "system": SYSTEM,
-            "prompt": prompt(text, examples),
-            "format": SCHEMA,
+            "system": system,
+            "prompt": text,
+            "format": schema,
             "stream": False,
             "keep_alive": settings.ollama_keep_alive,
             "options": {"temperature": 0},
@@ -99,6 +99,52 @@ def ask(text: str, *, model: str | None = None, examples: bool = USE_EXAMPLES) -
     )
     r.raise_for_status()
     return r.json()["response"]
+
+
+def ask(text: str, *, model: str | None = None, examples: bool = USE_EXAMPLES) -> str:
+    """Llama a Ollama y devuelve el JSON en texto (sin validar). Lanza httpx.HTTPError."""
+    return _generate(SYSTEM, prompt(text, examples), SCHEMA, model)
+
+
+# ---------------------------------------------------------------- categorización (Paso 10, D11)
+CATEGORY_SYSTEM = """Clasificas un comercio colombiano en UNA de las categorías dadas y respondes
+solo con JSON. Guíate por el tipo de negocio que indica el nombre. Las categorías generales son:
+- Alimentos: mercado, tiendas de barrio, fruterías, restaurantes, comidas rápidas, cafés.
+- Transporte: buses, taxis, mototaxis, apps de transporte, gasolina, peajes, vuelos.
+- Entretenimiento: ocio, cine, conciertos, bolos, videojuegos, streaming, gimnasios.
+- Servicios: agua, luz, gas, aseo, internet, telefonía y planes de celular.
+- Salud: médicos, odontología, terapias, laboratorios, droguerías.
+Puede haber otras categorías propias del usuario. Si el nombre no indica el tipo de negocio (una
+persona, una razón social genérica) o no encaja en ninguna, responde "Otros"."""
+
+
+def ask_category(
+    merchant: str, names: list[str], *, model: str | None = None
+) -> str | None:
+    """Categoría elegida entre [names], o None si la respuesta no es válida. Lanza httpx.HTTPError.
+
+    Solo recibe el nombre del comercio, nunca el correo. El enum del esquema limita la respuesta
+    a las categorías del usuario, y aquí se vuelve a comprobar.
+    """
+    schema = {
+        "type": "object",
+        "properties": {"category": {"type": "string", "enum": names}},
+        "required": ["category"],
+        "additionalProperties": False,
+    }
+    raw = _generate(
+        CATEGORY_SYSTEM,
+        f"Categorías: {', '.join(names)}\nComercio: {merchant[:100]}\nJSON:",
+        schema,
+        model,
+    )
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or set(data) != {"category"}:
+        return None
+    return data["category"] if data["category"] in names else None
 
 
 def preload() -> None:

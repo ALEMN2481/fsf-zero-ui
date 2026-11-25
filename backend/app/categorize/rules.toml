@@ -1,0 +1,32 @@
+# Reglas globales de categorización por comercio (Paso 10, D11). Revisable como las plantillas.
+#
+# Cada categoría (global, ya creada en la BD) lista palabras clave. El comercio se compara en
+# mayúsculas, sin tildes y con los espacios unificados, y cada palabra clave debe aparecer como
+# palabra completa: "ARA" encaja en "TIENDA ARA 12" pero no en "ARANDANOS".
+# La regla solo vale si el comercio encaja en UNA sola categoría; si encaja en varias o en
+# ninguna, el movimiento queda en Otros como 'pendiente' y el LLM local lo revisa después.
+
+Alimentos = [
+  "SUPERMERCADO", "MINIMERCADO", "EXITO", "CARULLA", "OLIMPICA", "JUMBO", "D1", "ARA",
+  "ISIMO", "MAKRO", "PANADERIA", "CAFE", "CAFETERIA", "RESTAURANTE", "ASADERO", "PIZZERIA", "FRUVER",
+  "CARNICERIA", "JUAN VALDEZ", "TOSTAO", "CREPES", "EL CORRAL", "FRISBY", "RAPPI",
+]
+Transporte = [
+  "UBER", "DIDI", "CABIFY", "INDRIVE", "TAXI", "TRANSMILENIO", "METRO DE MEDELLIN", "TERPEL",
+  "PRIMAX", "BIOMAX", "ESSO", "TEXACO", "GASOLINERA", "ESTACION DE SERVICIO", "PEAJE",
+  "PARQUEADERO", "AVIANCA", "LATAM", "WINGO",
+]
+Entretenimiento = [
+  "NETFLIX", "SPOTIFY", "DISNEY", "HBO", "PRIME VIDEO", "YOUTUBE", "STEAM", "PLAYSTATION",
+  "XBOX", "CINE", "CINEMA", "CINEMARK", "PROCINAL", "TEATRO", "GIMNASIO", "SMARTFIT", "BODYTECH",
+]
+Servicios = [
+  "CLARO", "MOVISTAR", "TIGO", "WOM", "ETB", "EPM", "ENEL", "CODENSA", "VANTI", "AFINIA", "AIR-E",
+  "ACUEDUCTO", "ENERGIA", "GAS NATURAL", "INTERNET", "TELEFONIA",
+]
+Salud = [
+  "DROGUERIA", "FARMACIA", "FARMATODO", "CRUZ VERDE", "LOCATEL", "COLSANITAS", "SURA", "COMPENSAR",
+  "CLINICA", "HOSPITAL", "LABORATORIO", "ODONTOLOGIA", "OPTICA",
+]
+# Retiros y avances en cajero: el efectivo no dice en qué se gasta.
+Otros = ["CAJERO"]

@@ -3,7 +3,7 @@ import uuid
 import pytest
 from local_supabase import ANON, PASSWORD, URL, admin, sign_in
 
-from app import auth
+from app import auth, categorize
 from app.config import settings
 
 
@@ -11,6 +11,8 @@ from app.config import settings
 def no_local_llm(monkeypatch):
     """Los tests no dependen de si Ollama está en marcha; los que lo usan lo simulan."""
     monkeypatch.setattr(settings, "ollama_url", "")
+    # Sin hilos de fondo que sigan vivos tras el test: quien lo necesita llama a run_pending.
+    monkeypatch.setattr(categorize, "schedule", lambda user_id: None)
 
 
 @pytest.fixture

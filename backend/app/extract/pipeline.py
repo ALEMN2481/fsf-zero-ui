@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from email.message import EmailMessage
 
-from app import service_db
+from app import categorize, service_db
 from app.extract import bancolombia, invoice, llm
 from app.extract.bancolombia import COLOMBIA, Alert
 from app.ingest.mail import INVOICE_RULE
@@ -154,6 +154,9 @@ def _process_alert(
         _insert(
             {
                 **row,
+                **categorize.assign(
+                    user_id, alert.merchant, alert.direction, alert.template
+                ),
                 "user_id": user_id,
                 "status": "pending_review" if action == "review" else status,
             }
@@ -212,6 +215,7 @@ def _process_invoice(user_id: str, email_id: str, msg: EmailMessage) -> str:
                 "invoice_cufe": inv.cufe,
                 "source_ref": f"cufe:{inv.cufe}",
                 "status": "confirmed" if action == "new" else "pending_review",
+                **categorize.assign(user_id, inv.supplier_name, "expense"),
             }
         )
     log.info("factura extraida id=%s accion=%s", email_id, action)
@@ -245,4 +249,5 @@ def process(
             ),
         },
     )
+    categorize.schedule(user_id)  # lo que quedó en 'pendiente' va al LLM, sin esperar
     return status

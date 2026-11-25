@@ -4,12 +4,14 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 from typing import Annotated
+from uuid import UUID
 
 import httpx
 from fastapi import Body, FastAPI, Header, HTTPException, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
-from app import gmail
+from app import categorize, gmail
 from app.auth import CurrentUser, User
 from app.config import settings
 from app.extract import llm
@@ -51,19 +53,30 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
-def _rest(user: CurrentUser, path: str) -> list[dict]:
-    """GET a la API REST de Supabase con el JWT del usuario: RLS decide qué filas ve (D4)."""
-    r = httpx.get(
+def _rest(
+    user: CurrentUser,
+    path: str,
+    method: str = "GET",
+    json: dict | None = None,
+    prefer: str | None = None,
+) -> list[dict]:
+    """API REST de Supabase con el JWT del usuario: RLS decide qué filas ve y escribe (D4)."""
+    headers = {
+        "apikey": settings.supabase_anon_key,
+        "Authorization": f"Bearer {user.token}",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    r = httpx.request(
+        method,
         f"{settings.supabase_url}/rest/v1/{path}",
-        headers={
-            "apikey": settings.supabase_anon_key,
-            "Authorization": f"Bearer {user.token}",
-        },
+        headers=headers,
+        json=json,
         timeout=5,
     )
-    if r.status_code != 200:
+    if r.status_code >= 300:
         raise HTTPException(502, "Error consultando Supabase")
-    return r.json()
+    return r.json() if r.content else []
 
 
 @app.get("/health")
@@ -85,6 +98,39 @@ def me(user: User) -> dict:
 def accounts(user: User) -> list[dict]:
     # Sin filtro por user_id a propósito: el aislamiento lo garantiza RLS.
     return _rest(user, "accounts?select=id,name,kind,last4,created_at&order=created_at")
+
+
+# ---------------------------------------------------------------- categorías (Paso 10, D11)
+@app.get("/categories")
+def categories(user: User) -> list[dict]:
+    """Globales (user_id null) y propias del usuario."""
+    return _rest(user, "categories?select=id,name,user_id&order=name")
+
+
+class CategoryChange(BaseModel):
+    category_id: UUID
+
+
+@app.patch("/transactions/{tx_id}/category")
+def set_category(tx_id: UUID, body: CategoryChange, user: User) -> dict:
+    """Corrige la categoría y aprende la regla comercio → categoría para los siguientes movimientos."""
+    tx = _rest(user, f"transactions?id=eq.{tx_id}&select=merchant")
+    if not tx:
+        raise HTTPException(404, "Movimiento no encontrado")
+    if not _rest(user, f"categories?id=eq.{body.category_id}&select=id"):
+        raise HTTPException(422, "Categoría no disponible")
+    change = {"category_id": str(body.category_id), "category_source": "usuario"}
+    _rest(user, f"transactions?id=eq.{tx_id}", "PATCH", change)
+    key = categorize.merchant_key(tx[0]["merchant"] or "")
+    if key:
+        _rest(
+            user,
+            "category_rules?on_conflict=user_id,merchant_key",
+            "POST",
+            {"merchant_key": key, "category_id": change["category_id"]},
+            prefer="resolution=merge-duplicates",
+        )
+    return {"id": str(tx_id), **change}
 
 
 # ---------------------------------------------------------------- Gmail (Paso 08B, D7)
