@@ -12,6 +12,8 @@ URL = os.getenv("SUPABASE_URL", "")
 ANON = os.getenv("SUPABASE_ANON_KEY", "")
 SERVICE = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 PASSWORD = "clave-de-prueba-1"
+# GoTrue con bcrypt va lento si la máquina está cargada (emulador, Gradle): 10 s se quedó corto.
+TIMEOUT = 30
 
 LOCAL_READY = bool(ANON and SERVICE and ("127.0.0.1" in URL or "localhost" in URL))
 # En la tarea db de la CI se exige el stack local: saltarse sería un falso verde.
@@ -26,7 +28,7 @@ requires_local = pytest.mark.skipif(
 def admin(method, path, **kw):
     h = {"apikey": SERVICE, "Authorization": f"Bearer {SERVICE}"}
     return httpx.request(
-        method, f"{URL}/auth/v1/admin/{path}", headers=h, timeout=10, **kw
+        method, f"{URL}/auth/v1/admin/{path}", headers=h, timeout=TIMEOUT, **kw
     )
 
 
@@ -35,7 +37,7 @@ def sign_in(email, password=PASSWORD):
         f"{URL}/auth/v1/token?grant_type=password",
         headers={"apikey": ANON},
         json={"email": email, "password": password},
-        timeout=10,
+        timeout=TIMEOUT,
     )
 
 
@@ -44,7 +46,7 @@ def sign_up(email, password):
         f"{URL}/auth/v1/signup",
         headers={"apikey": ANON},
         json={"email": email, "password": password},
-        timeout=10,
+        timeout=TIMEOUT,
     )
 
 

@@ -10,6 +10,15 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 08 (seguimiento) — Test intermitente con Supabase local y cierre de la prueba de Gmail
+- RQ: RQN 01
+- Causa del error intermitente (`77 passed, 1 error`, 53 s, máquina cargada con emulador y Gradle): falló la preparación del fixture `users`. Huella: quedaron en el Supabase local `fsf-a` y `fsf-b` creados durante esa ejecución; `a` inició sesión y `b` se creó, así que lo que falló fue el `sign_in` de `b` (el `.json()["access_token"]` no tenía comprobación). Sin `finally`, los dos usuarios quedaron huérfanos. No se conserva la traza (la salida se recortó con `tail -1`); lo más probable es el timeout de 10 s de GoTrue con bcrypt bajo carga. Descartado el límite de `sign_in_sign_ups` (30/5 min): 4 ejecuciones seguidas (44 llamadas en ~80 s) pasan.
+- Cambios: `backend/tests/conftest.py` — limpieza en `finally` aunque la preparación falle a medias y `assert` del `sign_in` con código y cuerpo; `backend/tests/local_supabase.py` — timeout de 30 s.
+- Verificación: test temporal que hace fallar el `sign_in` de `b` → `ERROR … sign_in 504: simulado` y 0 usuarios huérfanos después; suite completa con Supabase local → `78 passed`, 0 huérfanos; sin Supabase → `72 passed, 6 skipped`; `npx supabase test db` → 45 PASS; ruff check/format OK. Se borraron los 2 huérfanos.
+- Gmail de prueba: suscripción `gmail-fsf-push` borrada por el supervisor; permiso revocado con `gmail.disconnect` (revoke → HTTP 200; el refresh token devuelve `invalid_grant` después) y fila borrada (0 conexiones).
+- CI de `9149381`: CI https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45550245555 · DB https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45550245496
+- Siguiente: plan del Paso 09.
+
 ## 2026-11-25 · Paso 08B — Conexión con Gmail, avisos de Pub/Sub y prueba de punta a punta
 - RQ: RQF 02, RQN 01, RQN 04
 - Hecho por el supervisor (no verificado por el agente): Gmail API y Pub/Sub activadas, `gmail.readonly` en el consentimiento ("En pruebas"), `http://localhost:8000/gmail/callback` en el cliente web, tema `gmail-fsf` con `gmail-api-push@system.gserviceaccount.com` como publicador, cuenta de servicio para el push; variables en `backend/.env` (no leído).

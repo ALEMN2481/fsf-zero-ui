@@ -14,16 +14,21 @@ def users(monkeypatch):
     monkeypatch.setattr(settings, "supabase_anon_key", ANON)
     monkeypatch.setattr(auth, "_jwks", None)
     created = {}
-    for name in ("a", "b"):
-        email = f"fsf-{name}-{uuid.uuid4().hex[:8]}@test.local"
-        r = admin(
-            "POST",
-            "users",
-            json={"email": email, "password": PASSWORD, "email_confirm": True},
-        )
-        assert r.status_code == 200, r.text
-        token = sign_in(email).json()["access_token"]
-        created[name] = {"id": r.json()["id"], "email": email, "token": token}
-    yield created
-    for u in created.values():
-        admin("DELETE", f"users/{u['id']}")
+    try:
+        for name in ("a", "b"):
+            email = f"fsf-{name}-{uuid.uuid4().hex[:8]}@test.local"
+            r = admin(
+                "POST",
+                "users",
+                json={"email": email, "password": PASSWORD, "email_confirm": True},
+            )
+            assert r.status_code == 200, r.text
+            created[name] = {"id": r.json()["id"], "email": email}
+            s = sign_in(email)
+            assert s.status_code == 200, f"sign_in {s.status_code}: {s.text}"
+            created[name]["token"] = s.json()["access_token"]
+        yield created
+    finally:
+        # También si la preparación falla a medias: un usuario huérfano rompe otros tests.
+        for u in created.values():
+            admin("DELETE", f"users/{u['id']}")
