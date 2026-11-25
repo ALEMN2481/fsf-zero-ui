@@ -10,6 +10,28 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 08A — Recepción local: filtro, DKIM, cifrado y guardado
+- RQ: RQF 02, RQN 01
+- Decisión del supervisor: opción A (Gmail `gmail.readonly` + Pub/Sub), con B (reenvío) como plan de salida → D7 en `CONTEXT.md`. El paso se divide en 8A (local, sin nube) y 8B (Gmail, Pub/Sub, túnel, prueba de punta a punta).
+- Cambios:
+  - `supabase/migrations/20261125000000_inbound_emails.sql`: tabla `inbound_emails` (metadatos, `message_hash` único por usuario, `status`, `key_version` + `raw_encrypted`); RLS: el usuario solo lee **metadatos** propios (permisos por columna; el contenido y la versión de clave quedan fuera), no escribe; función `purge_inbound_emails()` (vacía el contenido 30 días tras extraer o 90 tras recibir; solo backend).
+  - `backend/app/ingest/mail.py`: reglas (Bancolombia `alertasynotificaciones@…` se guarda; `validaciondeseguridad@…` se descarta; factura electrónica por asunto DIAN con tipo `01` + `.zip`/`.xml`); DKIM solo del `Authentication-Results` de `mx.google.com` de más arriba, con `header.d` (o el dominio de `header.i`, que es lo que suele poner Gmail) igual al de la regla; en facturas, alineado con el dominio del remitente; limpieza de adjuntos (bancos: ninguno; facturas: solo `.zip`/`.xml`); tope de 5 MB guardado y 30 MB leído.
+  - `backend/app/ingest/crypto.py`: AES-256-GCM con versión de clave (`EMAIL_KEYS="1:…,2:…"`, cifra con la más alta) y AAD `usuario:hash` (el texto cifrado no sirve en otra fila).
+  - `backend/app/ingest/store.py`: `ingest(user_id, raw, source)` → `stored` / `duplicate` / `no_rule` / `discarded` / `dkim` / `too_large`; inserta con `service_role` (D4) e ignora duplicados; logs solo con id, regla y dominio.
+  - `backend/app/config.py`, `.env.example`, `requirements.txt` (`cryptography` explícito; ya venía con `pyjwt[crypto]`).
+  - Tests: `test_ingest_mail.py` (18, sin red), `test_ingest_store.py` (2, Supabase local), `supabase/tests/inbound_emails_test.sql` (12 pgTAP). Muestras inventadas en `backend/tests/samples/` (dominios `.example`, NIT ficticio, texto "EJEMPLO"; ningún correo real). Ayudantes de Supabase local movidos a `tests/local_supabase.py` + `conftest.py`.
+  - `supabase/tests/rls_test.sql`: el conteo de perfiles solo mira los dos usuarios del test (fallaba en local con usuarios previos; en la CI pasaba por tener la BD limpia).
+- Verificación:
+  - `npx supabase migration up` → aplicada en local · `npx supabase test db` → 39 tests, PASS.
+  - Con Supabase local: `REQUIRE_SUPABASE=1 pytest backend` → 38 passed. Sin Supabase: 33 passed, 5 skipped.
+  - Casos cubiertos: cabecera falsa inyectada debajo de la de Gmail → rechazado; `dkim=pass` de otro dominio → rechazado; `Authentication-Results` de otro servidor → no se confía; duplicado → no se guarda dos veces; el contenido en la BD no contiene el texto del correo y se descifra con su clave y AAD; rotación de clave; el usuario no puede leer `raw_encrypted` (401/403) y B no ve los correos de A; los logs (nivel DEBUG, todos los loggers) no contienen cuerpo, asunto, direcciones, `service_role`, clave de cifrado ni token.
+  - `ruff check backend` y `ruff format --check backend` → OK.
+  - CI (7f7810a) → CI success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45531774957 · DB success (migración + 39 pgTAP + pruebas de integración) https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45531774955
+- Commits: 6cb38d0 (migración y pgTAP), 7f7810a (ingesta y tests)
+- Pendientes (8B): conexión con Gmail (OAuth propio, `gmail_connections` con token cifrado, `needs_reconnect` ante `invalid_grant` visible en `/me`), webhook de Pub/Sub con OIDC, renovación diaria de `watch`, túnel y prueba de punta a punta. Confirmar con cabeceras reales: remitentes de otros bancos, formato DKIM de Gmail (`header.i`/`header.d`) y el código `01` del asunto DIAN.
+- Riesgos: el formato del asunto DIAN se tomó de una copia antigua de la norma; si las facturas reales difieren, se ajusta la regla. En la migración se perdió un intento con la CLI (`migration new` se colgó y dejó un archivo vacío que se borró y se marcó `reverted` en el historial local).
+- Siguiente: Paso 08B — tras recibir las instrucciones de Google Cloud y la confirmación del supervisor
+
 ## 2026-11-24 · Paso 07 (Parte B y cierre) — Google OAuth y ajustes
 - RQ: RQF 01, RQN 01, RQN 02, RQN 05
 - Hecho a mano por el supervisor (sin verificar por el agente, salvo lo que se prueba en local): cliente OAuth "Aplicación web" en Google Cloud; Google activado en el Supabase de la nube; `co.finanzassinfiltro.fsfapp://login-callback` en Redirect URLs de la nube; `supabase/.env` con las credenciales (no leído por el agente).
