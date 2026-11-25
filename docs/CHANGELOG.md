@@ -10,6 +10,42 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 08B — Conexión con Gmail, avisos de Pub/Sub y prueba de punta a punta
+- RQ: RQF 02, RQN 01, RQN 04
+- Hecho por el supervisor (no verificado por el agente): Gmail API y Pub/Sub activadas, `gmail.readonly` en el consentimiento ("En pruebas"), `http://localhost:8000/gmail/callback` en el cliente web, tema `gmail-fsf` con `gmail-api-push@system.gserviceaccount.com` como publicador, cuenta de servicio para el push; variables en `backend/.env` (no leído).
+- Parte local (hecha):
+  - Migración `gmail_connections` (una por usuario; `refresh_token` cifrado con AAD `user_id`; `history_id`; `watch_expires_at`; `status` `active`/`needs_reconnect`). RLS: el usuario solo ve estado, dirección y fechas; nunca el token ni el `history_id`.
+  - `backend/app/gmail.py`: URL de consentimiento con solo `gmail.readonly`, `include_granted_scopes`, `access_type=offline`, `prompt=consent` y PKCE; intercambio del código en el backend; `users.watch`; verificación del token OIDC de Pub/Sub (firma de Google, audiencia, emisor, cuenta de servicio y `email_verified`); lectura por `history.list` → prefiltro por De/Asunto con `format=metadata` → solo los candidatos se descargan con `format=raw`; duplicados por el **id de mensaje de Gmail** (`gmail:<id>`); `invalid_grant` → `needs_reconnect` sin reintentos; `renew_watches()` (diaria, a programar en el Paso 16); `disconnect` revoca y borra.
+  - `backend/app/main.py`: `POST /gmail/connect`, `GET /gmail/callback` (vuelve a `co.finanzassinfiltro.fsfapp://gmail-connected?status=ok|error`), `POST /gmail/push`, `POST /gmail/disconnect`; `/me` añade `gmail_status`. El log de accesos de uvicorn oculta la query (lleva el código de Google) y `httpx` solo registra avisos (sus URLs pueden llevar la dirección de Gmail en los filtros).
+  - App: botón "Conectar Gmail" / "Reconectar Gmail", estado "Gmail conectado" o "La conexión con Gmail se cayó", refresco al volver a la app; enlace `gmail-connected` en Android.
+- **Limitación para producción:** el `state` de OAuth (con el verificador PKCE) se guarda en memoria del backend; con varias instancias o tras un reinicio se pierde y la conexión falla. Antes del Paso 16, guardarlo en la BD con caducidad.
+- **Requisito para el Paso 09:** una factura solo se registra si el XML está dirigido al usuario (comprador) y, si es posible, si la firma de la DIAN del `AttachedDocument` es válida; si no, queda `pending_review`. DKIM prueba el dominio del remitente, no la legitimidad de la factura.
+- **Requisito para el Paso 09:** abrir los `.zip` y XML de forma segura: límite de tamaño descomprimido y de número de archivos, y XML sin entidades externas (p. ej. `defusedxml`).
+- Ajustes durante la prueba (decididos por el supervisor):
+  - **D8** (`CONTEXT.md`): todo el buzón; bancos desde `INBOX` y `SPAM`, facturas solo desde `INBOX`; siempre fuera Enviados, Borradores y Papelera (y archivados). Tests: banco en Spam se guarda, factura en Spam se descarta, Enviados/Borradores/Papelera/archivado se descartan, `watch` e `history` sin filtro de carpeta.
+  - App: con `status=error` en la vuelta muestra "No se pudo conectar Gmail, inténtalo de nuevo" y refresca el estado.
+  - Logs de diagnóstico sin secretos: en `/gmail/callback` solo tipo de error, paso (`token`/`profile`/`watch`), código HTTP y motivo de Google (nunca `log.exception`: la traza o el mensaje podrían llevar el código o un token); en `/gmail/push`, la categoría del rechazo (p. ej. `InvalidAudienceError`). Latencia Gmail → guardado en el log (RQN 04). Los logs de la app salen por consola.
+- Prueba de punta a punta (túnel rápido de Cloudflare autorizado solo para la prueba; llamadas a Gmail solo con la cuenta del supervisor; su URL no se guarda en el repo):
+  - Fallo 1: `paso=profile http=403 motivo=PERMISSION_DENIED/accessNotConfigured` → **la Gmail API no estaba activada** en el proyecto del cliente (la activó el supervisor).
+  - Fallo 2: no llegaban avisos → la suscripción `gmail-fsf-push` **no existía**; se creó (los avisos publicados antes no se entregan).
+  - Fallo 3: avisos rechazados con `InvalidAudienceError` → `PUBSUB_PUSH_AUDIENCE` en `backend/.env` no coincidía con la audiencia de la suscripción (una `s` de más al final); corregido.
+  - 1.er correo (factura de prueba): llegó a **Spam** → descartado sin descargarlo por D8 (comprobación real de "factura en Spam se descarta").
+  - 2.º correo: reenvío con asunto `RV: …` → el prefiltro lo descartó (el asunto DIAN debe empezar por el NIT). Del aviso al procesado: ~7 s.
+  - 3.er correo (nuevo, en Recibidos): **guardado** en `inbound_emails` con `rule=factura_electronica`, `status=pending_extraction`, `key_version=1`, 13 312 bytes cifrados sin el texto en claro; se descifra con su clave y AAD y solo conserva el `.zip`; `message_hash = sha256('gmail:' + id de Gmail)`.
+  - **Latencia observada (Gmail recibe → guardado): 10 024 ms** (una medición, con túnel y backend local). Está en el límite de RQN 04 (< 10 s); la medición formal es del Paso 15.
+  - Log del backend de toda la prueba: 0 apariciones de direcciones de Gmail, `ya29.`, `1//`, `code=`, `state=`, `refresh_token`, `access_token` y del asunto de prueba.
+  - Al terminar: túnel cerrado (sin procesos `cloudflared`; la URL ya no responde); la suscripción la borra o desactiva el supervisor en la consola.
+- Verificación automática: backend 72 passed sin Supabase (6 saltados) y **78 passed** con Supabase local en dos ejecuciones seguidas (una primera ejecución dio 1 error que no se repitió; causa no confirmada, posible lentitud del stack local); pgTAP 45 (el test de retención ahora mira solo sus usuarios: fallaba con el correo real guardado en local); app 21 passed, `flutter analyze` sin problemas.
+- Commits: d3a19f4 (conexión y webhook), 1dbf809 (D8 y diagnósticos), c231aa5 (aviso de error en la app)
+- Pendientes (en `ROADMAP.md`): antes del Paso 16, desactivar `/docs` y `/openapi.json` en producción, `state` de OAuth en la BD, programar `renew_watches()` y probar Gmail contra la nube; Paso 09, `.zip`/XML seguros y legitimidad de la factura.
+- Riesgos:
+  - Latencia en el límite (10,0 s en la única medición): el aviso de Pub/Sub tardó ~7 s; revisar en el Paso 15 (p. ej. procesar el aviso en segundo plano y responder antes).
+  - Un correo que pasa de Spam a Recibidos **después** de llegar no se procesa (Gmail lo registra como cambio de etiqueta, no como mensaje nuevo). Afecta poco a los bancos (se aceptan desde Spam).
+  - Las facturas reenviadas (`RV:`/`Fwd:`) no se aceptan, a propósito.
+  - En modo "En pruebas" el `refresh_token` caduca a los 7 días → `needs_reconnect`; el aviso al usuario es del Paso 14.
+  - Los logs de acceso de uvicorn guardan la IP de quien llama (Google y el propio túnel); no son secretos, pero son datos personales si el backend se usa en producción.
+- Siguiente: Paso 09 — Extracción vía MCP + LLM (no iniciado)
+
 ## 2026-11-25 · Paso 08A — Recepción local: filtro, DKIM, cifrado y guardado
 - RQ: RQF 02, RQN 01
 - Decisión del supervisor: opción A (Gmail `gmail.readonly` + Pub/Sub), con B (reenvío) como plan de salida → D7 en `CONTEXT.md`. El paso se divide en 8A (local, sin nube) y 8B (Gmail, Pub/Sub, túnel, prueba de punta a punta).
