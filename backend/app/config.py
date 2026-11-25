@@ -1,9 +1,14 @@
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# backend/.env, aunque se arranque desde otra carpeta.
-ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+# backend/.env, aunque se arranque desde otra carpeta. Con FSF_ENV_FILE="" no se lee ningún archivo
+# (el servidor MCP de demostración no carga secretos).
+ENV_FILE = (
+    os.getenv("FSF_ENV_FILE", str(Path(__file__).resolve().parent.parent / ".env"))
+    or None
+)
 
 
 class Settings(BaseSettings):
