@@ -1,6 +1,7 @@
 """Paso 09B, integración contra Supabase LOCAL: correo → transactions y doble conteo en los dos órdenes."""
 
 import base64
+import json
 import logging
 import os
 import re
@@ -193,7 +194,7 @@ def test_alert_outside_templates_goes_through_llm_to_review(env, monkeypatch):
         "last4": "2222",
     }
     monkeypatch.setattr(settings, "ollama_url", "http://ollama.test")
-    monkeypatch.setattr(llm, "ask", lambda t, **kw: __import__("json").dumps(answer))
+    monkeypatch.setattr(llm, "ask", lambda t, **kw: json.dumps(answer))
     assert ingest(user_id, alert_email("", text)) == "stored"
 
     monkeypatch.setattr(
@@ -208,3 +209,39 @@ def test_alert_outside_templates_goes_through_llm_to_review(env, monkeypatch):
         "transfer",
     )
     assert statuses(user_id) == ["extracted", "pending_review"]
+
+
+def test_llm_date_window_uses_the_email_arrival_not_now(env, monkeypatch):
+    """Un reproceso días después no rechaza la fecha: la ventana se mide contra received_at."""
+    from datetime import datetime, timedelta
+
+    from app.extract import llm, pipeline
+    from app.ingest import mail
+
+    user_id, _ = env
+    arrived = datetime.now(llm.COLOMBIA) - timedelta(days=10)
+    day = arrived.strftime("%d/%m/%Y")
+    text = OUTSIDE.format(date=day)
+    answer = json.dumps(
+        {
+            "amount": "$120.000,00",
+            "direction": "income",
+            "merchant": "JUAN INVENTADO",
+            "date": day,
+            "time": "08:12",
+            "payment_method": "transfer",
+            "last4": "2222",
+        }
+    )
+    # Contra "ahora" la misma respuesta se rechazaría (10 días > 3).
+    assert llm.check(text, answer, datetime.now(llm.COLOMBIA)).reason == "fecha"
+
+    monkeypatch.setattr(settings, "ollama_url", "http://ollama.test")
+    monkeypatch.setattr(llm, "ask", lambda t, **kw: answer)
+    msg = mail.parse(alert_email("", text))
+    email_id = str(uuid.uuid4())  # reproceso directo, sin fila previa en inbound_emails
+    assert (
+        pipeline.process(user_id, email_id, "bancolombia", msg, arrived) == "extracted"
+    )
+    [tx] = txs(user_id)
+    assert (tx["amount"], tx["status"]) == ("120000.00", "pending_review")

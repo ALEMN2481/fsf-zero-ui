@@ -111,7 +111,9 @@ def _update(tx_id: str, row: dict) -> None:
     service_db.rest("PATCH", "transactions", params={"id": f"eq.{tx_id}"}, json=row)
 
 
-def _process_alert(user_id: str, email_id: str, msg: EmailMessage) -> str:
+def _process_alert(
+    user_id: str, email_id: str, msg: EmailMessage, received_at: datetime
+) -> str:
     text = body_text(msg)
     alert = bancolombia.parse_alert(text)
     if alert.status == "no_movement":
@@ -119,7 +121,9 @@ def _process_alert(user_id: str, email_id: str, msg: EmailMessage) -> str:
     if (
         alert.reason == "sin_plantilla"
     ):  # solo lo que no encaja en ninguna plantilla va al LLM
-        alert = llm.extract(text, datetime.now(UTC))
+        # La ventana de fechas se mide contra la llegada del correo, no contra ahora: así un
+        # reproceso posterior no lo rechaza.
+        alert = llm.extract(text, received_at)
     if alert.status not in ("confirmed", "pending_review") or alert.amount is None:
         log.info("alerta para revisión id=%s motivo=%s", email_id, alert.reason)
         return "pending_review"
@@ -214,7 +218,9 @@ def _process_invoice(user_id: str, email_id: str, msg: EmailMessage) -> str:
     return "pending_review" if action == "review" else "extracted"
 
 
-def process(user_id: str, email_id: str, rule: str, msg: EmailMessage) -> str:
+def process(
+    user_id: str, email_id: str, rule: str, msg: EmailMessage, received_at: datetime
+) -> str:
     """Extrae el movimiento de un correo recién guardado y marca su estado. Devuelve el estado.
 
     shortcut: sin bloqueo entre avisos simultáneos del mismo usuario (una alerta y su factura a la vez
@@ -223,7 +229,7 @@ def process(user_id: str, email_id: str, rule: str, msg: EmailMessage) -> str:
     if rule == INVOICE_RULE:
         status = _process_invoice(user_id, email_id, msg)
     elif rule == "bancolombia":
-        status = _process_alert(user_id, email_id, msg)
+        status = _process_alert(user_id, email_id, msg, received_at)
     else:
         status = "pending_review"
     service_db.rest(

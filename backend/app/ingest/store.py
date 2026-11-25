@@ -4,6 +4,7 @@ Los logs solo llevan metadatos: nunca asunto, cuerpo, direcciones completas ni c
 """
 
 import logging
+from datetime import datetime
 
 from app import service_db
 from app.extract import pipeline
@@ -50,7 +51,7 @@ def ingest(
     r = service_db.rest(
         "POST",
         "inbound_emails",
-        params={"on_conflict": "user_id,message_hash", "select": "id"},
+        params={"on_conflict": "user_id,message_hash", "select": "id,received_at"},
         prefer="resolution=ignore-duplicates,return=representation",
         json={
             "user_id": user_id,
@@ -73,7 +74,13 @@ def ingest(
         decision.sender_domain,
     )
     try:
-        pipeline.process(user_id, rows[0]["id"], decision.rule, msg)
+        pipeline.process(
+            user_id,
+            rows[0]["id"],
+            decision.rule,
+            msg,
+            datetime.fromisoformat(rows[0]["received_at"]),
+        )
     except Exception as e:  # noqa: BLE001 - el correo ya está guardado; un fallo no debe perderlo
         # Queda en pending_extraction. Solo el tipo: el mensaje podría llevar datos del correo.
         log.error("falló la extracción id=%s error=%s", rows[0]["id"], type(e).__name__)
