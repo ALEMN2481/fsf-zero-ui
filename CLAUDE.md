@@ -35,6 +35,9 @@ Contexto: docs/CONTEXT.md · Ruta: docs/ROADMAP.md · Bitácora: docs/CHANGELOG.
 - Supabase en la nube: toda acción contra el proyecto remoto (push, consultas,
   `--remote`, `--yes`, creación de usuarios) requiere confirmación explícita
   del supervisor antes de ejecutarla.
+- Comandos de git que pueden perder trabajo (`reset --hard`, `rm --cached -r`, `clean`,
+  `checkout -- .`, `push --force`, `rebase`) requieren confirmación explícita del
+  supervisor antes de ejecutarse, aunque `git status` esté limpio.
 - Si una decisión cambia la arquitectura: registrarla en CONTEXT.md §Decisiones.
 
 ## Al cerrar cada entrega (reporte obligatorio)
