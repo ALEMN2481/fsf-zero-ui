@@ -10,6 +10,24 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 12 (cierre) — Capturas, emulador estable y tests independientes de la BD
+- RQ: RQF 04, RQN 05, RQN 02, RQN 03.
+- Cambios:
+  - Tests de integración (`e701214`): cada test conecta un Gmail único con `+etiqueta` (`cliente.ejemplo+<sufijo>@gmail.com`; Gmail ignora la etiqueta al comparar con el comprador de las facturas), así que la suite no depende de lo que ya haya en la base. `demo_seed.py` usa lo mismo.
+  - Capturas con golden tests (`409f9f8`): `app/test/goldens_test.dart` carga Roboto y MaterialIcons del SDK de Flutter, activa las sombras reales y usa respuestas reales del backend local para la cuenta demo sembrada con el conjunto del supervisor (`app/test/goldens/data/`). Ocho PNG en `app/test/goldens/`: `1_principal`, `1b_principal_texto_200`, `2_negativo`, `2b_negativo_texto_200`, `3_sin_presupuesto`, `4_estado_vacio`, `5_movimiento_por_confirmar`, `6_bolsillos`. Etiqueta `golden` (`dart_test.yaml`); la CI los excluye porque el render depende del sistema operativo (`a2a1e55`). Regenerar: `flutter test --tags golden --update-goldens`.
+  - Emulador: AVD nuevo `Pixel_8_API_35` (imagen `android-35/google_apis/x86_64`) en lugar del Pixel_8 con API 37.
+- Verificación:
+  - Suite de integración con los usuarios demo todavía en la base → `289 passed` (antes, 21 errores por Gmail duplicado). Después se borraron los 2 usuarios demo locales (autorizado por el supervisor) y se repitió: backend con Supabase local → `289 passed`; sin Supabase → `260 passed, 29 skipped`; `npx supabase test db` → PASS (69); ruff OK.
+  - App: `flutter analyze` → No issues found; `flutter test --exclude-tags golden` → `57 passed`; `flutter test --tags golden` → `8 passed` contra los PNG.
+  - Prueba real en el emulador de API 35 contra el backend y el Supabase locales: la app arranca, inicia sesión con la cuenta demo (correo y contraseña) y muestra la principal con cifras: «Hoy -$ 24.709», «Tu diario de mañana baja de $ 309.391 a $ 304.450», semana $ 1.212.855, libre $ 1.522.250, $ 61.250 por confirmar; mismas cifras que el golden 2. Captura: `docs/capturas/paso12_emulador_api35_principal.png`.
+  - Nota: la burbuja «≡» que se veía en el emulador es la barra flotante del teclado de Android, no de la app.
+- Pendientes/riesgos:
+  - Nube: sigue solo con la migración inicial; el supervisor repetirá el push (faltan 6 migraciones, con la de Realtime).
+  - Comprobar `FLAG_SECURE` con una build de release en un dispositivo.
+  - Realtime solo se probó con widget tests (la señal llega por un `Stream`); la prueba con el servicio de Realtime real queda para el Paso 14, junto con el aviso con la app cerrada.
+  - iOS sin probar (no hay Mac).
+- Siguiente: Paso 13 (Coach), tras la aprobación del supervisor.
+
 ## 2026-11-25 · Paso 12 (parte 1) — Pantalla «Disponible diario»: código y tests
 - RQ: RQF 04, RQF 05, RQN 05, RQN 02, RQN 03, RQN 01. Decisión **D13** (`CONTEXT.md`).
 - Nube: `migration list --linked` tras el `db push --remote` del supervisor → **sigue solo con la migración inicial**; no se ejecutó nada más contra la nube.
