@@ -184,6 +184,7 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
         client: widget.client,
         token: session.accessToken,
         onSignOut: _signOut,
+        openUrl: widget.openUrl,
       );
     }
     return MaterialApp(title: 'Finanzas Sin Filtro', scaffoldMessengerKey: _messenger, home: home);

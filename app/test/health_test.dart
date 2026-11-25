@@ -55,4 +55,60 @@ void main() {
       await tester.pump(const Duration(minutes: 1)); // deja terminar el temporizador del mock
     });
   });
+
+  group('Gmail', () {
+    Widget withMe(String meJson, {List<http.Request>? sent, List<Uri>? opened}) => MaterialApp(
+      home: HomeScreen(
+        client: MockClient((r) async {
+          sent?.add(r);
+          if (r.url.path == '/me') return http.Response(meJson, 200);
+          if (r.url.path == '/gmail/connect') {
+            return http.Response('{"url":"https://accounts.google.com/o/oauth2/v2/auth?x=1"}', 200);
+          }
+          return http.Response('{"status":"ok"}', 200);
+        }),
+        token: 'jwt-usuario',
+        onSignOut: () {},
+        openUrl: (url) async {
+          opened?.add(url);
+          return true;
+        },
+      ),
+    );
+
+    testWidgets('sin conexión ofrece conectar Gmail y abre Google con el token del usuario', (tester) async {
+      final sent = <http.Request>[], opened = <Uri>[];
+      await tester.pumpWidget(withMe('{"id":"u","gmail_status":null}', sent: sent, opened: opened));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Conectar Gmail'));
+      await tester.pumpAndSettle();
+      final connect = sent.singleWhere((r) => r.url.path == '/gmail/connect');
+      expect(connect.method, 'POST');
+      expect(connect.headers['Authorization'], 'Bearer jwt-usuario');
+      expect(opened.single.host, 'accounts.google.com');
+    });
+
+    testWidgets('conectado no muestra el botón', (tester) async {
+      await tester.pumpWidget(withMe('{"id":"u","gmail_status":"active"}'));
+      await tester.pumpAndSettle();
+      expect(find.text('Gmail conectado'), findsOneWidget);
+      expect(find.text('Conectar Gmail'), findsNothing);
+    });
+
+    testWidgets('conexión caída pide reconectar', (tester) async {
+      await tester.pumpWidget(withMe('{"id":"u","gmail_status":"needs_reconnect"}'));
+      await tester.pumpAndSettle();
+      expect(find.text('La conexión con Gmail se cayó'), findsOneWidget);
+      expect(find.text('Reconectar Gmail'), findsOneWidget);
+    });
+
+    testWidgets('al volver a la app se refresca el estado', (tester) async {
+      final sent = <http.Request>[];
+      await tester.pumpWidget(withMe('{"id":"u","gmail_status":null}', sent: sent));
+      await tester.pumpAndSettle();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(sent.where((r) => r.url.path == '/me').length, 2);
+    });
+  });
 }

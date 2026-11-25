@@ -5,9 +5,7 @@ Los logs solo llevan metadatos: nunca asunto, cuerpo, direcciones completas ni c
 
 import logging
 
-import httpx
-
-from app.config import settings
+from app import service_db
 from app.ingest import crypto, mail
 
 log = logging.getLogger("fsf.ingest")
@@ -17,8 +15,14 @@ def _aad(user_id: str, digest: str) -> bytes:
     return f"{user_id}:{digest}".encode()
 
 
-def ingest(user_id: str, raw: bytes, source: str = "gmail") -> str:
-    """Devuelve 'stored', 'duplicate', 'too_large' o el motivo del descarte ('no_rule', 'discarded', 'dkim')."""
+def ingest(
+    user_id: str, raw: bytes, source: str = "gmail", dedupe_key: str | None = None
+) -> str:
+    """Devuelve 'stored', 'duplicate', 'too_large' o el motivo del descarte ('no_rule', 'discarded', 'dkim').
+
+    [dedupe_key] identifica el mensaje para no guardarlo dos veces (en Gmail, su id de mensaje);
+    sin él se usa el Message-ID, que pone el remitente.
+    """
     try:
         msg = mail.parse(raw)
     except ValueError:
@@ -40,16 +44,13 @@ def ingest(user_id: str, raw: bytes, source: str = "gmail") -> str:
         log.info("correo descartado motivo=too_large regla=%s", decision.rule)
         return "too_large"
 
-    digest = mail.message_hash(msg, raw)
+    digest = mail.message_hash(msg, raw, dedupe_key)
     version, blob = crypto.encrypt(clean, _aad(user_id, digest))
-    r = httpx.post(
-        f"{settings.supabase_url}/rest/v1/inbound_emails",
+    r = service_db.rest(
+        "POST",
+        "inbound_emails",
         params={"on_conflict": "user_id,message_hash", "select": "id"},
-        headers={
-            "apikey": settings.supabase_service_role_key,
-            "Authorization": f"Bearer {settings.supabase_service_role_key}",
-            "Prefer": "resolution=ignore-duplicates,return=representation",
-        },
+        prefer="resolution=ignore-duplicates,return=representation",
         json={
             "user_id": user_id,
             "source": source,
@@ -57,17 +58,9 @@ def ingest(user_id: str, raw: bytes, source: str = "gmail") -> str:
             "sender_domain": decision.sender_domain,
             "message_hash": digest,
             "key_version": version,
-            "raw_encrypted": "\\x" + blob.hex(),
+            "raw_encrypted": service_db.to_bytea(blob),
         },
-        timeout=10,
     )
-    if r.status_code not in (200, 201):
-        log.error(
-            "no se pudo guardar el correo status=%s regla=%s",
-            r.status_code,
-            decision.rule,
-        )
-        r.raise_for_status()
     rows = r.json()
     if not rows:
         log.info("correo duplicado regla=%s", decision.rule)

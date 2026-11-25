@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from local_supabase import (
     ANON,
     PASSWORD,
+    SERVICE,
     URL,
     admin,
     bearer,
@@ -67,3 +68,28 @@ def test_unconfirmed_email_cannot_sign_in():
         assert r.json().get("error_code") == "email_not_confirmed"
     finally:
         admin("DELETE", f"users/{signup.json()['id']}")
+
+
+def test_me_shows_gmail_status_only_to_its_owner(users):
+    a, b = users["a"], users["b"]
+    client = TestClient(app)
+    assert client.get("/me", headers=bearer(a["token"])).json()["gmail_status"] is None
+
+    r = httpx.post(  # la ingesta (service_role) marca la conexión de A como caída
+        f"{URL}/rest/v1/gmail_connections",
+        headers={"apikey": SERVICE, **bearer(SERVICE)},
+        json={
+            "user_id": a["id"],
+            "gmail_address": f"{uuid.uuid4().hex[:8]}@gmail.example",
+            "status": "needs_reconnect",
+            "key_version": 1,
+            "refresh_token_encrypted": "\x01",
+        },
+        timeout=10,
+    )
+    assert r.status_code == 201, r.text
+    assert (
+        client.get("/me", headers=bearer(a["token"])).json()["gmail_status"]
+        == "needs_reconnect"
+    )
+    assert client.get("/me", headers=bearer(b["token"])).json()["gmail_status"] is None

@@ -31,6 +31,8 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="co.finanzassinfiltro.fsfapp" android:host="login-callback"/>
+                <!-- Vuelta tras conectar Gmail (Paso 08B). -->
+                <data android:scheme="co.finanzassinfiltro.fsfapp" android:host="gmail-connected"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

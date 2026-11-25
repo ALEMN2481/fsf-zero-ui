@@ -147,6 +147,13 @@ def sanitize(msg: EmailMessage, rule: str) -> bytes:
     return msg.as_bytes()
 
 
-def message_hash(msg: EmailMessage, raw: bytes) -> str:
-    message_id = str(msg.get("Message-ID", "")).strip().lower()
-    return hashlib.sha256(message_id.encode() if message_id else raw).hexdigest()
+def message_hash(msg: EmailMessage, raw: bytes, dedupe_key: str | None = None) -> str:
+    key = dedupe_key or str(msg.get("Message-ID", "")).strip().lower()
+    return hashlib.sha256(key.encode() if key else raw).hexdigest()
+
+
+def is_candidate(from_header: str, subject: str) -> bool:
+    """Prefiltro con solo De y Asunto: decide si vale la pena descargar el correo completo."""
+    sender = parseaddr(from_header)[1].lower()
+    is_bank = any(sender == r.sender and not r.discard for r in BANK_RULES)
+    return is_bank or bool(_INVOICE_SUBJECT.match(subject))
