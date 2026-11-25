@@ -10,6 +10,35 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 09C (parte 1) — Respaldo con LLM local (Ollama) elegido midiendo
+- RQ: RQF 02, RQN 01, RQN 03, RQN 04
+- Alcance: puntos 10–13 del supervisor y el plan aprobado del 9C. **Los puntos 1–9 no llegaron al agente**; el servidor MCP de demostración queda pendiente de ellos. Decisión **D10** (`CONTEXT.md`): LLM local con Ollama.
+- Cambios:
+  - `backend/app/extract/llm.py` — solo para alertas `sin_plantilla`. Petición a Ollama con esquema JSON (`LlmMovement`, Pydantic estricto, sin campos de más), temperatura 0 y `keep_alive` = `OLLAMA_KEEP_ALIVE` (30m). Comprobaciones contra el texto: sin otra moneda; el monto debe ser el **único** monto en COP del texto (con `$`/`COP`); últimos 4 dígitos tras `*`; comercio presente en el texto; fecha válida a ±3 días de la recepción. Si pasa, el movimiento queda **siempre** `pending_review`; si no, el correo queda en revisión sin movimiento. Ollama caído o desactivado no rompe nada.
+  - `backend/app/main.py` — precarga el modelo al arrancar en un hilo aparte (`lifespan`): el arranque no espera ni falla si Ollama no está (solo un aviso con el tipo de error).
+  - `backend/app/config.py` — `OLLAMA_URL`, `OLLAMA_MODEL` (`qwen2.5:3b`), `OLLAMA_KEEP_ALIVE` (`30m`), `OLLAMA_TIMEOUT` (30 s).
+  - `backend/scripts/eval_llm.py` + `backend/tests/samples/llm/fuera_de_plantilla.json` — 15 alertas **inventadas** que no encajan en ninguna plantilla (12 con movimiento, 3 que deben rechazarse: dos montos, USD, sin movimiento).
+  - Tests: `test_extract_llm.py` (21, Ollama simulado), integración del camino LLM en `test_extract_store.py`; `conftest.py` desactiva el LLM en todos los tests (no dependen de si Ollama está en marcha).
+- Comparación (`python -m scripts.eval_llm`, `keep_alive=30m`; precisión por campo sobre las 12 con movimiento):
+
+  | Modelo · prompt | gasto/ingreso | monto | comercio | fecha | medio | 4 díg. | aceptadas | rechazos correctos | **montos aceptados erróneamente** | caliente (mediana) | frío |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | llama3.2:3b sin ejemplos | 67 % | 75 % | 67 % | 75 % | 75 % | 75 % | 9/12 | 3/3 | **0** | 1,57 s | 11,70 s |
+  | llama3.2:3b con ejemplos | 75 % | 75 % | 67 % | 75 % | 50 % | 75 % | 9/12 | 3/3 | **0** | 1,53 s | 12,97 s |
+  | **qwen2.5:3b sin ejemplos** | **100 %** | **100 %** | **100 %** | **100 %** | **92 %** | **100 %** | 12/12 | 3/3 | **0** | 1,82 s | 93,17 s (1.ª vez desde disco) |
+  | qwen2.5:3b con ejemplos | 100 % | 100 % | 92 % | 100 % | 92 % | 100 % | 12/12 | 3/3 | **0** | 1,67 s | 12,55 s |
+
+  - Elegido: **qwen2.5:3b sin ejemplos** (mejores resultados; los ejemplos restan un acierto en el comercio). llama3.2:3b pierde 3 alertas porque escribe `"null"` como texto en `time` y el esquema estricto lo rechaza; aun mirando su salida cruda, acierta menos (gasto/ingreso 11/12, medio de pago 10/12).
+  - Latencia de la extracción con LLM (estos números valen; la referencia de 0,14 s del supervisor era una respuesta de 10 tokens): en caliente **1,7–1,8 s** (~74 tokens con el esquema, ~50 tok/s); en frío **11,7–13 s** con el modelo en la caché del disco y **93 s** la primera vez que se lee del disco. **La carga suma ~10–11 s** cuando el modelo no está en memoria: por eso la precarga y el `keep_alive`.
+  - Precarga real: con los modelos descargados, `uvicorn` responde `/health` a los 3,4 s y `qwen2.5:3b` queda en memoria a los 11,0 s (en segundo plano), con caducidad a 30 min; con `OLLAMA_URL` sin servidor, arranca igual y registra `no se pudo precargar el modelo error=ConnectError`.
+- Verificación: backend con Supabase local → `188 passed`; sin Supabase → `178 passed, 10 skipped`; `npx supabase test db` → PASS; ruff OK. El conjunto del supervisor sigue 22/22 (el LLM no interviene: A04 es USD).
+- Pendientes/riesgos:
+  - Servidor MCP de demostración (9C, parte 2): espera los puntos 1–9.
+  - El 3B confunde campos que no se pueden comprobar contra el texto (gasto/ingreso, medio de pago): todo lo del LLM queda en revisión.
+  - Con el modelo fuera de memoria, la extracción con LLM no cabe en RQN 04 (< 10 s); con el `timeout` de 30 s, una primera carga desde disco (93 s) da `llm_no_disponible` y el correo queda en revisión, sin perderse.
+  - Medición con una sola pasada por modelo y en esta máquina (con Docker y Supabase en marcha).
+- Siguiente: puntos 1–9 del supervisor y servidor MCP mínimo.
+
 ## 2026-11-25 · Paso 09B — Alertas de Bancolombia, escritura en transactions y doble conteo
 - RQ: RQF 02, RQN 01, RQN 03
 - Antes del 9B: el total del XML usa el mismo rango que `parse_cop` (`MAX_AMOUNT`, cabe en `numeric(14,2)`); fuera de él → `pending_review` (`d535e97`).
