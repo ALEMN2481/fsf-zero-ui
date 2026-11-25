@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:app_links/app_links.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -21,12 +24,16 @@ class HomeScreen extends StatefulWidget {
     required this.token,
     required this.onSignOut,
     this.openUrl = openInBrowser,
+    this.links,
   });
 
   final http.Client client;
   final String token;
   final VoidCallback onSignOut;
   final Future<bool> Function(Uri url) openUrl;
+
+  /// Enlaces que abren la app (por defecto, los del sistema); los tests pasan los suyos.
+  final Stream<Uri>? links;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -36,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final Future<String> _health = _checkHealth();
   late Future<Map<String, dynamic>?> _me = _loadMe();
   bool _connecting = false;
+  StreamSubscription<Uri>? _linkSub;
 
   Map<String, String> get _auth => {'Authorization': 'Bearer ${widget.token}'};
 
@@ -43,11 +51,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _linkSub = (widget.links ?? AppLinks().uriLinkStream).listen(_onLink);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _linkSub?.cancel();
     super.dispose();
   }
 
@@ -58,6 +68,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() {
         _me = _loadMe();
       });
+    }
+  }
+
+  /// Vuelta del backend tras conectar Gmail: co.finanzassinfiltro.fsfapp://gmail-connected?status=ok|error
+  void _onLink(Uri uri) {
+    if (uri.host != 'gmail-connected' || !mounted) return;
+    setState(() {
+      _me = _loadMe();
+    });
+    if (uri.queryParameters['status'] != 'ok') {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo conectar Gmail, inténtalo de nuevo')));
     }
   }
 

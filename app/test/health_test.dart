@@ -57,7 +57,7 @@ void main() {
   });
 
   group('Gmail', () {
-    Widget withMe(String meJson, {List<http.Request>? sent, List<Uri>? opened}) => MaterialApp(
+    Widget withMe(String meJson, {List<http.Request>? sent, List<Uri>? opened, Stream<Uri>? links}) => MaterialApp(
       home: HomeScreen(
         client: MockClient((r) async {
           sent?.add(r);
@@ -68,6 +68,7 @@ void main() {
           return http.Response('{"status":"ok"}', 200);
         }),
         token: 'jwt-usuario',
+        links: links ?? const Stream.empty(),
         onSignOut: () {},
         openUrl: (url) async {
           opened?.add(url);
@@ -109,6 +110,29 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(sent.where((r) => r.url.path == '/me').length, 2);
+    });
+
+    testWidgets('si la vuelta llega con error, lo dice y refresca', (tester) async {
+      final links = StreamController<Uri>();
+      final sent = <http.Request>[];
+      await tester.pumpWidget(withMe('{"id":"u","gmail_status":null}', sent: sent, links: links.stream));
+      await tester.pumpAndSettle();
+      links.add(Uri.parse('co.finanzassinfiltro.fsfapp://gmail-connected?status=error'));
+      await tester.pumpAndSettle();
+      expect(find.text('No se pudo conectar Gmail, inténtalo de nuevo'), findsOneWidget);
+      expect(sent.where((r) => r.url.path == '/me').length, 2);
+      await links.close();
+    });
+
+    testWidgets('si la vuelta llega bien, no muestra error', (tester) async {
+      final links = StreamController<Uri>();
+      await tester.pumpWidget(withMe('{"id":"u","gmail_status":"active"}', links: links.stream));
+      await tester.pumpAndSettle();
+      links.add(Uri.parse('co.finanzassinfiltro.fsfapp://gmail-connected?status=ok'));
+      await tester.pumpAndSettle();
+      expect(find.text('No se pudo conectar Gmail, inténtalo de nuevo'), findsNothing);
+      expect(find.text('Gmail conectado'), findsOneWidget);
+      await links.close();
     });
   });
 }
