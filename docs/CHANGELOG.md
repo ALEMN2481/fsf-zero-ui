@@ -10,6 +10,25 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 09A — Facturas DIAN seguras y montos colombianos a Decimal
+- RQ: RQF 02, RQN 01, RQN 03
+- Decisión: **D9** (`CONTEXT.md`): la extracción es un módulo dentro del backend (`app/extract/`); como el documento del proyecto exige MCP, se añadirá un servidor MCP mínimo para la demostración sobre el mismo módulo (9C), fuera del camino del correo.
+- Cambios:
+  - `backend/app/extract/amounts.py` — `parse_cop`: `$1.234.567,89`, `COP 50.000`, `$50,000.00`, `1,5`… → `Decimal` con 2 decimales; rechaza cero, negativos, grupos de miles mal formados, mezclas ambiguas y > `numeric(14,2)`. Sin `float`.
+  - `backend/app/extract/invoice.py` — `.zip` en memoria con límites (≤ 10 archivos, ≤ 5 MB descomprimidos leídos con tope, compresión ≤ 100:1, sin rutas `..`/absolutas, sin `.zip` anidado ni cifrado, exactamente un XML); XML con `defusedxml` (`forbid_dtd`, sin entidades), también en la factura y la respuesta embebidas en CDATA. Lee número, CUFE, fecha/hora (−05:00 si no trae zona), emisor y NIT, correos del comprador, total y moneda, medio de pago. `check_invoice` → `confirmed` solo si `ResponseCode` = `02`, el CUFE de la factura es el del `ApplicationResponse` (y tiene formato SHA-384), el correo del comprador es el Gmail conectado (en Gmail sin puntos ni `+etiqueta`) y la moneda es COP; si no, `pending_review` con un motivo sin datos personales.
+  - Todas las rutas del XML, el código `02` y la tabla de medios de pago están juntas al principio de `invoice.py` para ajustarlas con una factura real anonimizada (la de la prueba del 08B la creó el agente y no sirve para confirmar la estructura).
+  - `backend/tests/samples/dian/attached_document.xml` — muestra **inventada** con la estructura del Anexo Técnico (UBL 2.1).
+  - `backend/requirements.txt` — `defusedxml==0.7.*`.
+- Verificación:
+  - `pytest tests/test_extract_amounts.py tests/test_extract_invoice.py` → `63 passed` (25 de montos; 38 de facturas: lectura, comprador, DIAN, XML inseguro con XXE y "billion laughs" también dentro del CDATA, 9 casos de `.zip` peligroso, `.zip` cifrado).
+  - Mutaciones: quitar la comprobación de la DIAN, la del comprador o el límite de compresión hace fallar los tests (2, 2 y 1 fallos).
+  - Suite completa con Supabase local → `141 passed`; sin Supabase → `135 passed, 6 skipped`; ruff check/format OK.
+- Pendientes/riesgos:
+  - La estructura del XML está tomada del Anexo Técnico y sin confirmar contra una factura real; el significado del código `02` y la tabla de medios de pago no se pudieron confirmar en una fuente oficial en línea.
+  - Firma XAdES sin verificar hasta el Paso 15: la comprobación de la DIAN es solo estructural.
+  - El módulo aún no está conectado al flujo del correo ni escribe en `transactions` (9B).
+- Siguiente: Paso 09B (Bancolombia por reglas, escritura en `transactions` y doble conteo con facturas), tras la aprobación del supervisor.
+
 ## 2026-11-25 · Paso 08 (seguimiento) — Test intermitente con Supabase local y cierre de la prueba de Gmail
 - RQ: RQN 01
 - Causa del error intermitente (`77 passed, 1 error`, 53 s, máquina cargada con emulador y Gradle): falló la preparación del fixture `users`. Huella: quedaron en el Supabase local `fsf-a` y `fsf-b` creados durante esa ejecución; `a` inició sesión y `b` se creó, así que lo que falló fue el `sign_in` de `b` (el `.json()["access_token"]` no tenía comprobación). Sin `finally`, los dos usuarios quedaron huérfanos. No se conserva la traza (la salida se recortó con `tail -1`); lo más probable es el timeout de 10 s de GoTrue con bcrypt bajo carga. Descartado el límite de `sign_in_sign_ups` (30/5 min): 4 ejecuciones seguidas (44 llamadas en ~80 s) pasan.
