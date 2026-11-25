@@ -203,6 +203,17 @@ def _process_invoice(user_id: str, email_id: str, msg: EmailMessage) -> str:
     action, tx = invoice_action(inv, bank_txs)
     if action == "complete":
         _update(tx["id"], {"invoice_cufe": inv.cufe, "merchant": inv.supplier_name})
+        # Cambió el comercio: se recategoriza, salvo que el usuario ya la corrigiera. La condición va
+        # en la misma escritura por si corrige entre medias (null: movimiento de antes del Paso 10).
+        service_db.rest(
+            "PATCH",
+            "transactions",
+            params={
+                "id": f"eq.{tx['id']}",
+                "or": "(category_source.is.null,category_source.neq.usuario)",
+            },
+            json=categorize.assign(user_id, inv.supplier_name, "expense"),
+        )
     elif action in ("new", "new_pending"):
         _insert(
             {

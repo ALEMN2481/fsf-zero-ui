@@ -9,7 +9,7 @@ import pytest
 import test_extract_store
 from fastapi.testclient import TestClient
 from local_supabase import bearer, requires_local
-from test_extract_store import alert_email, invoice_email, svc
+from test_extract_store import ALERTS, alert_email, invoice_email, svc
 
 from app import categorize
 from app.config import settings
@@ -274,3 +274,30 @@ def test_backfill_categorizes_old_movements(env, monkeypatch):
         svc("GET", "transactions", params={"category_id": "is.null", "select": "id"})
         == []
     )
+
+
+@pytest.mark.parametrize("corrected", [False, True])
+def test_invoice_completion_recategorizes_unless_user_corrected(
+    env, users, monkeypatch, corrected
+):
+    """La factura cambia el comercio del movimiento del banco: nueva categoría, salvo corrección."""
+    user_id, _ = env
+    text = ALERTS["A02"].replace("SUPERMERCADO EJEMPLO SAS", "PAGOS INVENTADOS")
+    assert ingest(user_id, alert_email("", text)) == "stored"
+    [tx] = rows(user_id)
+    assert tx["category_source"] == "pendiente"
+    if corrected:
+        r = client.patch(
+            f"/transactions/{tx['id']}/category",
+            headers=bearer(users["a"]["token"]),
+            json={"category_id": categories()["Entretenimiento"]},
+        )
+        assert r.status_code == 200
+
+    assert (
+        ingest(user_id, invoice_email("F01")) == "stored"
+    )  # completa: mismo monto y día
+    [tx] = rows(user_id)
+    assert tx["merchant"] == "SUPERMERCADO EJEMPLO SAS"
+    expected = ("Entretenimiento", "usuario") if corrected else ("Alimentos", "regla")
+    assert (tx["category"]["name"], tx["category_source"]) == expected
