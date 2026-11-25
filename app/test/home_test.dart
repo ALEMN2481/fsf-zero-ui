@@ -9,7 +9,8 @@ import 'package:fsf_app/money.dart' show nbsp;
 import 'package:fsf_app/movements.dart';
 import 'package:fsf_app/pockets_screen.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
+
+import 'support.dart';
 
 final now = DateTime.utc(2026, 11, 25, 17); // 12:00 en Colombia
 
@@ -68,26 +69,6 @@ final movements = [
     'tipo': 'efectivo_factura',
   },
 ];
-
-/// Backend falso: respuestas por "MÉTODO /ruta"; guarda lo enviado.
-class FakeBackend {
-  FakeBackend(this.routes);
-  final Map<String, Object? Function(http.Request)> routes;
-  final sent = <http.Request>[];
-
-  late final client = MockClient((r) async {
-    sent.add(r);
-    final handler = routes['${r.method} ${r.url.path}'];
-    if (handler == null) return http.Response('{"detail":"no encontrado"}', 404);
-    final out = handler(r);
-    if (out is http.Response) return out;
-    return http.Response.bytes(utf8.encode(jsonEncode(out)), 200);
-  });
-
-  int count(String route) => sent.where((r) => '${r.method} ${r.url.path}' == route).length;
-  Map<String, dynamic> body(String route) =>
-      jsonDecode(sent.lastWhere((r) => '${r.method} ${r.url.path}' == route).body) as Map<String, dynamic>;
-}
 
 FakeBackend backend({Map<String, dynamic>? state, List<Map<String, dynamic>>? list, String gmail = 'active'}) =>
     FakeBackend({
