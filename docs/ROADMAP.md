@@ -11,7 +11,7 @@ Cada paso: **RQ** que cubre · **Construir** (acotado) · **Verificar** antes de
 | 4 | [x] 2026-11-24 · f5865f5 | Esqueleto Flutter (T1.2) | RQN 02, RQN 05 | `app/` Flutter, 1 pantalla que llama `/health` | `flutter test`; corre en emulador Android (iOS si hay Mac) | Plataformas probadas |
 | 5 | [x] 2026-11-24 · 8a871df | Modelo de datos en Supabase (T1.3) | RQN 03, RQN 01 | Migraciones: perfil, cuentas, transacciones, categorías, presupuestos, bolsillos; montos NUMERIC; RLS | Migraciones aplican en limpio; test RLS: usuario A no lee datos de B | Lista de tablas |
 | 6 | [x] 2026-11-24 · 5519729 | Auth backend (T1.4) | RQF 01, RQN 01 | Supabase Auth (email + Google OAuth); FastAPI valida JWT | Tests: sin token 401, token válido 200, email no verificado bloqueado | Flujos probados |
-| 7 | [ ] | Auth en app (T1.4) | RQF 01, RQN 05, RQN 02 | Login/registro mínimo + desbloqueo biométrico local | Registro → verificación → login en emulador; widget tests | Nº de campos (≤ 3) |
+| 7 | [~] Parte A hecha | Auth en app (T1.4) | RQF 01, RQN 05, RQN 02 | Login/registro mínimo + desbloqueo biométrico local | Registro → verificación → login en emulador; widget tests | Nº de campos (≤ 3) |
 | 8 | [ ] | Recepción de correos (T2.1) | RQF 02, RQN 01 | OAuth al correo (solo lectura), filtro de remitentes bancarios/DIAN, tokens cifrados | Correo de prueba recibido y guardado; sin tokens en logs | Remitentes soportados |
 | 9 | [ ] | Extracción vía MCP + LLM (T2.2) | RQF 02, RQN 03 | Servidor MCP de extracción; JSON validado por esquema; ambiguo → "por aclarar" | ≥ 10 correos anonimizados: precisión por campo medida; JSON inválido nunca llega a la BD | % de aciertos por campo |
 | 10 | [ ] | Categorización (T2.3) | RQF 03 | Reglas por comercio primero, LLM de respaldo; categoría editable | Tests con comercios conocidos; toda transacción con categoría | Tabla de reglas |
@@ -21,6 +21,9 @@ Cada paso: **RQ** que cubre · **Construir** (acotado) · **Verificar** antes de
 | 14 | [ ] | Push FCM (T4.1) | RQF 02, RQN 04 | Notificación de gasto registrado + aclaración de parsing ambiguo | Correo de prueba → push recibido en dispositivo | Tiempo observado |
 | 15 | [ ] | Seguridad y latencia (T4.2) | RQN 01, RQN 04 | Cifrado de campos sensibles, HTTPS, revisión de secretos; medición end-to-end | p95 correo → push < 10 s en 20 pruebas; checklist de seguridad | p50/p95 |
 | 16 | [ ] | Despliegue (T4.3) | RQN 01, RQN 02 | Backend en producción (HTTPS); builds APK/IPA | Smoke test contra producción; app instalada en dispositivo | URLs/artefactos |
+
+## Pendientes que deben cerrarse antes del Paso 16
+- "Olvidé mi contraseña" (RQF 01): enviar el correo de recuperación y abrir la app con el enlace `co.finanzassinfiltro.fsfapp://login-callback` para fijar la nueva contraseña. Quedó fuera del Paso 7 por decisión del supervisor.
 
 ## Cobertura de requerimientos
 - RQF 01 → 6, 7 · RQF 02 → 8, 9, 14 · RQF 03 → 10 · RQF 04 → 11, 12, 13 · RQF 05 → 11

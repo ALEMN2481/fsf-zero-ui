@@ -10,6 +10,43 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-24 · Paso 07 (Parte A) — Acceso con correo, sesión cifrada y bloqueo local
+- RQ: RQF 01, RQN 01, RQN 02, RQN 05
+- Antes de empezar:
+  - Seguimiento del Paso 06 (ddd1b9e) → CI success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45513697610 · DB success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45513697682
+  - `style(backend)` (b4d4c97): `ruff format` en el backend; la CI fija ruff 0.17.6 y corre `ruff format --check`; se añade el tipo `style` a las reglas de `CLAUDE.md` → CI success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45514859502 · DB success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45514859525
+- Decisiones del supervisor: sesión cifrada; bloqueo al abrir y tras ≥ 5 min en segundo plano (acepta PIN; sin biometría ni PIN no bloquea y avisa una vez); prueba manual en local; Google en local (Parte B). Registradas como D6 en `CONTEXT.md`.
+- Cambios:
+  - `app/pubspec.yaml`: `supabase_flutter` 2.18, `flutter_secure_storage` 11.2, `local_auth` 3.0.
+  - `app/lib/session_storage.dart` (nuevo): `LocalStorage` de Supabase sobre almacenamiento seguro.
+  - `app/lib/auth_screen.dart` (nuevo): un formulario de **2 campos** (correo, contraseña) para registro e inicio de sesión; validación local (correo válido, ≥ 8 caracteres); `emailRedirectTo = co.finanzassinfiltro.fsfapp://login-callback`; mensajes en español por código de error.
+  - `app/lib/main.dart`: inicializa Supabase con la sesión cifrada; bloqueo con `local_auth` al abrir y tras ≥ 5 min en segundo plano; aviso único "Activa un bloqueo de pantalla para proteger tu información"; cerrar sesión borra la sesión del almacenamiento seguro aunque falle la red.
+  - `app/lib/home_screen.dart` (nuevo): `/health` y `/me` con el token (prueba de punta a punta con el backend del Paso 06).
+  - Android: `intent-filter` del enlace, `USE_BIOMETRIC`, `FlutterFragmentActivity`, tema AppCompat; `kotlin.incremental=false` (atajo: falla con el proyecto en D: y la caché de pub en C:). iOS: `CFBundleURLTypes` y `NSFaceIDUsageDescription` (sin probar, no hay Mac).
+  - `supabase/config.toml`: el enlace de la app en `additional_redirect_urls`. `app/env.example.json`: plantilla de `--dart-define-from-file=.env.json` (`.env.json` queda ignorado).
+  - Tests: `app/test/auth_test.dart` (9 tests) y `health_test.dart` adaptado.
+- Verificación:
+  - `flutter analyze` → No issues found · `flutter test` → 12 passed (2 campos; validación sin llamadas; registro con `redirect_to` correcto; correo sin confirmar; login sin pedir biometría; bloqueo al abrir y fallo que mantiene el bloqueo; 4:59 no bloquea y 5:00 sí; sin bloqueo de pantalla avisa una sola vez; cerrar sesión borra la clave del almacenamiento seguro).
+  - Emulador Android (Pixel_8, API 37) contra Supabase y backend locales (`adb reverse` de 54321, 54324 y 8000):
+    - Registro en la app → "Revisa tu correo para confirmar la cuenta" → correo en Mailpit con `redirect_to=co.finanzassinfiltro.fsfapp://login-callback` → al abrir el enlace, Android abre la app, `/token` 200 (PKCE) y la app entra con "Backend conectado" y `/me` 200 ("Sesión verificada" tras reabrir; ver riesgos).
+    - Sin PIN en el dispositivo: abre sin bloqueo. Con PIN: al abrir pide el PIN del sistema ("Desbloquea Finanzas Sin Filtro"); cancelar deja la app bloqueada; con el PIN entra.
+    - Segundo plano real: 60 s → no bloquea; 308 s → pide desbloqueo.
+    - Huella registrada en el emulador (`adb emu finger touch 1`): al abrir pide huella y con ella entra.
+    - Cerrar sesión → formulario; al reabrir la app no hay sesión. Inicio de sesión con contraseña → entra sin pedir biometría y `/me` 200.
+  - Nº de campos del formulario: **2** (≤ 3).
+  - CI (80878a9) → CI success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45522853744 · DB success https://github.com/ALEMN2481/fsf-zero-ui/actions/runs/45522853671
+- Commits: 531f5ab (configuración), 80878a9 (acceso y bloqueo)
+- Pendientes:
+  - Parte B del Paso 07: Google OAuth (necesita el cliente OAuth de Google y `supabase/.env` creados por el supervisor).
+  - Antes del Paso 16: "Olvidé mi contraseña" (anotado en `ROADMAP.md`).
+  - Nube: añadir `co.finanzassinfiltro.fsfapp://login-callback` en Authentication → URL Configuration → Redirect URLs (lo hace el supervisor; sin eso el correo de confirmación de la nube no vuelve a la app).
+  - Textos del sistema en inglés: el título del diálogo de biometría ("Authentication required") y el nombre de la app en Android ("fsf_app").
+- Riesgos:
+  - **Paso 08:** `gmail.readonly` es un permiso restringido de Google. Funciona en modo "En pruebas" con hasta 100 usuarios de prueba, pero publicar la app exige la verificación de seguridad de Google.
+  - El primer `/me` tras reiniciar el emulador superó el tiempo de espera de 5 s de la app (el backend respondió 200, pero tarde); en llamadas siguientes tardó 0,3–0,5 s. Si se repite fuera del emulador, conviene subir ese tiempo para `/me`.
+  - La pantalla con el diálogo de PIN sale negra en las capturas (Android protege esa ventana); la evidencia de esos pasos es el volcado de la interfaz (`uiautomator`).
+- Siguiente: Paso 07 (Parte B) — Google OAuth
+
 ## 2026-11-24 · Paso 06 (seguimiento) — Recarga del JWKS limitada y con caducidad
 - RQ: RQN 01
 - Cambios:
