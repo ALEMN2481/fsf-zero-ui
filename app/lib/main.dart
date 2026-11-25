@@ -47,8 +47,27 @@ Future<void> main() async {
       storage: storage,
       deviceLock: LocalAuthentication(),
       client: http.Client(),
+      changesFor: (userId) => transactionChanges(Supabase.instance.client, userId),
     ),
   );
+}
+
+/// Señal de Supabase Realtime cuando cambia un movimiento del usuario (RLS): la pantalla vuelve a
+/// pedir sus cifras al backend; aquí no se calcula nada. Al cancelar se cierra el canal.
+Stream<void> transactionChanges(SupabaseClient supabase, String userId) {
+  late final RealtimeChannel channel;
+  final controller = StreamController<void>(onCancel: () => supabase.removeChannel(channel));
+  channel = supabase
+      .channel('transactions-$userId')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'transactions',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: userId),
+        callback: (_) => controller.add(null),
+      )
+      .subscribe();
+  return controller.stream;
 }
 
 class FsfApp extends StatefulWidget {
@@ -61,6 +80,7 @@ class FsfApp extends StatefulWidget {
     required this.client,
     this.now = DateTime.now,
     this.openUrl = openInBrowser,
+    this.changesFor,
   });
 
   final GoTrueClient auth;
@@ -70,6 +90,7 @@ class FsfApp extends StatefulWidget {
   final http.Client client;
   final DateTime Function() now;
   final Future<bool> Function(Uri url) openUrl;
+  final Stream<void> Function(String userId)? changesFor;
 
   @override
   State<FsfApp> createState() => _FsfAppState();
@@ -80,6 +101,9 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
   late final StreamSubscription<AuthState> _authSub;
   bool _locked = false;
   DateTime? _backgroundSince;
+
+  /// Capa que tapa la app fuera de primer plano: la miniatura de recientes no muestra datos.
+  bool _covered = false;
 
   @override
   void initState() {
@@ -102,6 +126,8 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final covered = state != AppLifecycleState.resumed;
+    if (covered != _covered) setState(() => _covered = covered);
     if (state == AppLifecycleState.paused) {
       _backgroundSince ??= widget.now();
     } else if (state == AppLifecycleState.resumed) {
@@ -185,10 +211,27 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
         token: session.accessToken,
         onSignOut: _signOut,
         openUrl: widget.openUrl,
+        changes: widget.changesFor == null ? null : () => widget.changesFor!(session.user.id),
       );
     }
-    return MaterialApp(title: 'Finanzas Sin Filtro', scaffoldMessengerKey: _messenger, home: home);
+    return MaterialApp(
+      title: 'Finanzas Sin Filtro',
+      scaffoldMessengerKey: _messenger,
+      home: home,
+      builder: (context, child) => Stack(children: [child!, if (_covered) const PrivacyCover()]),
+    );
   }
+}
+
+class PrivacyCover extends StatelessWidget {
+  const PrivacyCover({super.key});
+
+  @override
+  // Material: la capa está por encima del Navigator y, sin él, el texto sale con el estilo de
+  // emergencia de Flutter (rojo, 48 px, subrayado amarillo).
+  Widget build(BuildContext context) => const Positioned.fill(
+    child: Material(color: Colors.white, child: Center(child: Text('Finanzas Sin Filtro'))),
+  );
 }
 
 class LockScreen extends StatelessWidget {

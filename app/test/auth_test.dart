@@ -96,6 +96,9 @@ class Harness {
   Future<void> restoreSession() => auth.setInitialSession(jsonEncode(sessionJson()));
 }
 
+/// La pantalla principal está a la vista (su menú «Más opciones»).
+final homeShown = find.byTooltip('Más opciones');
+
 Future<void> fill(WidgetTester tester, String email, String password) async {
   await tester.enterText(find.widgetWithText(TextFormField, 'Correo'), email);
   await tester.enterText(find.widgetWithText(TextFormField, 'Contraseña'), password);
@@ -153,7 +156,7 @@ void main() {
       await fill(tester, 'a@test.co', 'clave-segura-1');
       await tester.tap(find.text('Entrar'));
       await tester.pumpAndSettle();
-      expect(find.text('Cerrar sesión'), findsOneWidget);
+      expect(homeShown, findsOneWidget);
       expect(lock.prompts, 0);
     });
   });
@@ -178,11 +181,11 @@ void main() {
       await tester.pumpWidget(h.app(lock));
       await tester.pumpAndSettle();
       expect(find.text('Desbloquear'), findsOneWidget);
-      expect(find.text('Cerrar sesión'), findsNothing);
+      expect(homeShown, findsNothing);
 
       await tester.tap(find.text('Desbloquear'));
       await tester.pumpAndSettle();
-      expect(find.text('Cerrar sesión'), findsOneWidget);
+      expect(homeShown, findsOneWidget);
       expect(lock.prompts, 2);
       final android = lock.messages.whereType<AndroidAuthMessages>().single;
       expect(android.cancelButton, 'Cancelar'); // diálogo del sistema en español
@@ -209,7 +212,7 @@ void main() {
 
       await background(const Duration(minutes: 4, seconds: 59));
       expect(lock.prompts, 1);
-      expect(find.text('Cerrar sesión'), findsOneWidget);
+      expect(homeShown, findsOneWidget);
 
       await background(const Duration(minutes: 5));
       expect(lock.prompts, 2);
@@ -221,7 +224,7 @@ void main() {
       await h.restoreSession();
       await tester.pumpWidget(h.app(FakeLock(supported: false)));
       await tester.pumpAndSettle();
-      expect(find.text('Cerrar sesión'), findsOneWidget);
+      expect(homeShown, findsOneWidget);
       expect(find.text(lockWarning), findsOneWidget);
       expect(await h.storage.read(key: 'lock_warning_shown'), isNotNull);
 
@@ -241,9 +244,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(await h.storage.read(key: supabasePersistSessionKey), isNotNull);
 
+    await tester.tap(find.byTooltip('Más opciones'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
     expect(await h.storage.read(key: supabasePersistSessionKey), isNull);
     expect(find.text('Entrar'), findsOneWidget);
+  });
+
+  testWidgets('fuera de primer plano una capa tapa la app (pantalla de recientes)', (tester) async {
+    final h = Harness(stored: {supabasePersistSessionKey: jsonEncode(sessionJson())});
+    await h.restoreSession();
+    await tester.pumpWidget(h.app(FakeLock(supported: false)));
+    await tester.pumpAndSettle();
+    expect(homeShown, findsOneWidget);
+    expect(find.byType(PrivacyCover), findsNothing);
+    for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+      expect(find.byType(PrivacyCover), findsOneWidget, reason: '$state');
+      // Con estilo del tema, no el de emergencia (rojo y subrayado) que sale sin Material.
+      final style = DefaultTextStyle.of(tester.element(find.text('Finanzas Sin Filtro'))).style;
+      expect(style.decoration, isNot(TextDecoration.underline));
+      expect(style.color, isNot(const Color(0xd0ff0000)));
+    }
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(find.byType(PrivacyCover), findsNothing);
   });
 }
