@@ -185,3 +185,40 @@ def test_wrong_key_length_is_refused(monkeypatch):
     )
     with pytest.raises(ValueError):
         crypto.encrypt(b"x", b"aad")
+
+
+# ---------------------------------------------------------------- carpetas (D8)
+@pytest.mark.parametrize(
+    "kind, labels, allowed",
+    [
+        ("bank", ["SPAM"], True),
+        ("bank", ["INBOX"], True),
+        ("invoice", ["INBOX"], True),
+        ("invoice", ["SPAM"], False),
+        ("bank", ["SENT", "INBOX"], False),
+        ("invoice", ["DRAFT", "INBOX"], False),
+        ("bank", ["TRASH", "SPAM"], False),
+        ("bank", ["CATEGORY_UPDATES"], False),
+    ],
+)
+def test_allowed_location(kind, labels, allowed):
+    assert mail.allowed_location(kind, labels) is allowed
+
+
+def test_candidate_kind():
+    assert (
+        mail.candidate_kind(
+            "A <alertasynotificaciones@notificacionesbancolombia.com>", "x"
+        )
+        == "bank"
+    )
+    assert (
+        mail.candidate_kind(
+            "B <validaciondeseguridad@notificacionesbancolombia.com>", "x"
+        )
+        is None
+    )
+    assert (
+        mail.candidate_kind("C <f@c.example>", "900000000;C SAS;FE-1;01;C") == "invoice"
+    )
+    assert mail.candidate_kind("D <o@t.example>", "Ofertas") is None

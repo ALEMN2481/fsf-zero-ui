@@ -91,11 +91,18 @@ class FakeGoogle:
         self.token_error: str | None = None
         self.scope = gmail.SCOPE
         self.history = (200, {"historyId": "130", "history": []})
-        self.messages: dict[str, tuple[str, str, bytes]] = {}
+        # id -> (De, Asunto, correo crudo[, etiquetas]); sin etiquetas = bandeja de entrada
+        self.messages: dict[str, tuple] = {}
+        self.fail: dict[
+            str, tuple[int, dict]
+        ] = {}  # fragmento de URL -> (estado, cuerpo)
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.requests.append(req)
         url, path = str(req.url), req.url.path
+        for fragment, (status, body) in self.fail.items():
+            if fragment in url:
+                return httpx.Response(status, json=body)
         if url == gmail.TOKEN_URL:
             if self.token_error:
                 return httpx.Response(400, json={"error": self.token_error})
@@ -126,14 +133,21 @@ class FakeGoogle:
             status, body = self.history
             return httpx.Response(status, json=body)
         mid = path.rsplit("/", 1)[-1]
-        sender, subject, raw = self.messages[mid]
+        sender, subject, raw, *rest = self.messages[mid]
+        labels = rest[0] if rest else ["INBOX"]
         if req.url.params["format"] == "metadata":
             headers = [
                 {"name": "From", "value": sender},
                 {"name": "Subject", "value": subject},
             ]
             return httpx.Response(
-                200, json={"id": mid, "payload": {"headers": headers}}
+                200,
+                json={
+                    "id": mid,
+                    "internalDate": str(int(time.time() * 1000) - 2000),
+                    "labelIds": labels,
+                    "payload": {"headers": headers},
+                },
             )
         return httpx.Response(
             200,
@@ -299,14 +313,18 @@ def push(env, token: str | None, address="usuario.ejemplo@gmail.com", history_id
         pytest.param({"exp": int(time.time()) - 10}, id="caducado"),
     ],
 )
-def test_push_without_valid_google_oidc_is_rejected(env, token):
+def test_push_without_valid_google_oidc_is_rejected(env, token, caplog):
     env.db.add()
-    r = push(env, push_token(**token) if token is not None else None)
+    raw = push_token(**token) if token is not None else None
+    r = push(env, raw)
     assert r.status_code == 401
+    assert "aviso rechazado motivo=" in caplog.text  # la causa queda en el log...
+    assert raw is None or raw not in caplog.text  # ...pero nunca el token
     assert env.google.requests == []  # no se toca Gmail
 
 
-def test_push_downloads_only_candidates_and_dedupes_by_gmail_id(env):
+def test_push_downloads_only_candidates_and_dedupes_by_gmail_id(env, caplog):
+    caplog.set_level(logging.INFO)
     env.db.add()
     env.google.history = (
         200,
@@ -337,6 +355,7 @@ def test_push_downloads_only_candidates_and_dedupes_by_gmail_id(env):
     assert env.ingested == [("user-a", "gmail:m-banco")]
     assert env.google.calls("format=raw") == 1  # el boletín no se descarga entero
     assert env.db.conns["user-a"]["history_id"] == 130
+    assert "latencia gmail→guardado ms=" in caplog.text  # medida para RQN 04
 
 
 def test_invalid_grant_marks_needs_reconnect_without_retrying(env):
@@ -420,3 +439,133 @@ def test_gmail_flow_logs_no_tokens_or_addresses(env, caplog):
         q["state"],
     ):
         assert secret.lower() not in caplog.text.lower(), secret
+
+
+def test_failed_callback_logs_only_the_error_type(env, caplog, monkeypatch):
+    caplog.set_level(logging.DEBUG)
+
+    def boom(user_id, code, verifier):
+        raise RuntimeError(f"fallo con code={code} y refresh_token=ref-filtrado")
+
+    monkeypatch.setattr(gmail, "connect", boom)
+    q = start(env)
+    r = env.client.get(
+        "/gmail/callback",
+        params={"state": q["state"], "code": "codigo-secreto-9"},
+        follow_redirects=False,
+    )
+    assert r.headers["location"].endswith("status=error")
+    assert "RuntimeError" in caplog.text
+    assert "codigo-secreto-9" not in caplog.text and "ref-filtrado" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "fragment, status, body, expected",
+    [
+        pytest.param(
+            gmail.TOKEN_URL,
+            401,
+            {"error": "invalid_client", "error_description": "detalle-privado"},
+            "paso=token http=401 motivo=invalid_client",
+            id="canje",
+        ),
+        pytest.param(
+            "/watch",
+            403,
+            {
+                "error": {
+                    "code": 403,
+                    "message": "detalle-privado projects/x/topics/y",
+                    "status": "PERMISSION_DENIED",
+                    "errors": [{"reason": "forbidden", "message": "detalle-privado"}],
+                }
+            },
+            "paso=watch http=403 motivo=PERMISSION_DENIED/forbidden",
+            id="watch",
+        ),
+    ],
+)
+def test_failed_callback_logs_step_status_and_reason_only(
+    env, caplog, fragment, status, body, expected
+):
+    caplog.set_level(logging.DEBUG)
+    env.google.fail = {fragment: (status, body)}
+    q = start(env)
+    r = env.client.get(
+        "/gmail/callback",
+        params={"state": q["state"], "code": "codigo-secreto-8"},
+        follow_redirects=False,
+    )
+    assert r.headers["location"].endswith("status=error")
+    assert expected in caplog.text
+    assert (
+        "detalle-privado" not in caplog.text and "codigo-secreto-8" not in caplog.text
+    )
+
+
+# ---------------------------------------------------------------- carpetas (D8)
+INVOICE_SUBJECT = "900000000;COMERCIO EJEMPLO SAS;FE-1;01;COMERCIO EJEMPLO"
+INVOICE_FROM = "Comercio <facturas@comercio-ejemplo.example>"
+
+
+@pytest.mark.parametrize(
+    "sender, subject, labels, downloaded",
+    [
+        pytest.param(
+            BANK, "Alertas", ["SPAM", "UNREAD"], True, id="banco-en-spam-se-guarda"
+        ),
+        pytest.param(BANK, "Alertas", ["INBOX"], True, id="banco-en-entrada-se-guarda"),
+        pytest.param(
+            INVOICE_FROM,
+            INVOICE_SUBJECT,
+            ["SPAM"],
+            False,
+            id="factura-en-spam-se-descarta",
+        ),
+        pytest.param(
+            INVOICE_FROM,
+            INVOICE_SUBJECT,
+            ["INBOX"],
+            True,
+            id="factura-en-entrada-se-guarda",
+        ),
+        pytest.param(
+            BANK, "Alertas", ["SENT", "INBOX"], False, id="enviados-se-descarta"
+        ),
+        pytest.param(BANK, "Alertas", ["DRAFT"], False, id="borradores-se-descarta"),
+        pytest.param(BANK, "Alertas", ["TRASH"], False, id="papelera-se-descarta"),
+        pytest.param(
+            BANK, "Alertas", ["CATEGORY_UPDATES"], False, id="archivado-se-descarta"
+        ),
+    ],
+)
+def test_folder_rules(env, sender, subject, labels, downloaded):
+    env.db.add()
+    env.google.history = (
+        200,
+        {
+            "historyId": "130",
+            "history": [{"messagesAdded": [{"message": {"id": "m1"}}]}],
+        },
+    )
+    env.google.messages = {"m1": (sender, subject, SAMPLE, labels)}
+    assert push(env, push_token()).status_code == 204
+    assert env.google.calls("format=raw") == int(
+        downloaded
+    )  # si no se acepta, ni se descarga
+    assert env.ingested == ([("user-a", "gmail:m1")] if downloaded else [])
+
+
+def test_watch_and_history_cover_the_whole_mailbox(env):
+    q = start(env)
+    env.client.get(
+        "/gmail/callback",
+        params={"state": q["state"], "code": "c"},
+        follow_redirects=False,
+    )
+    watch = next(r for r in env.google.requests if r.url.path.endswith("/watch"))
+    assert "labelIds" not in watch.content.decode()
+    env.db.add()
+    push(env, push_token())
+    history = next(r for r in env.google.requests if r.url.path.endswith("/history"))
+    assert "labelId" not in history.url.params

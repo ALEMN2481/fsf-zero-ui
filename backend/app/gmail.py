@@ -105,11 +105,8 @@ def _watch(access_token: str) -> dict:
         "POST",
         access_token,
         "watch",
-        json={
-            "topicName": settings.gmail_pubsub_topic,
-            "labelIds": ["INBOX"],
-            "labelFilterBehavior": "INCLUDE",
-        },
+        # Todo el buzón (D8): los bancos también se leen desde Spam. Las carpetas se filtran al leer.
+        json={"topicName": settings.gmail_pubsub_topic},
     )
     r.raise_for_status()
     return r.json()  # {"historyId": "...", "expiration": "<epoch ms>"}
@@ -117,6 +114,25 @@ def _watch(access_token: str) -> dict:
 
 def _expiry(watch: dict) -> str:
     return datetime.fromtimestamp(int(watch["expiration"]) / 1000, UTC).isoformat()
+
+
+def google_error_summary(e: httpx.HTTPStatusError) -> str:
+    """Paso, código HTTP y motivo de un error de Google, sin el cuerpo ni descripciones (podrían citar datos)."""
+    r = e.response
+    try:
+        err = r.json().get("error")
+    except ValueError:
+        err = None
+    if isinstance(
+        err, dict
+    ):  # APIs de Google: {"error": {"status": ..., "errors": [{"reason": ...}]}}
+        reasons = ",".join(
+            x.get("reason", "") for x in err.get("errors", []) if isinstance(x, dict)
+        )
+        motive = f"{err.get('status')}/{reasons or '-'}"
+    else:  # OAuth: {"error": "invalid_client", "error_description": ...}
+        motive = str(err)
+    return f"paso={r.request.url.path.rsplit('/', 1)[-1]} http={r.status_code} motivo={motive}"
 
 
 def connect(user_id: str, code: str, verifier: str) -> None:
@@ -199,6 +215,7 @@ def verify_push(authorization: str | None) -> None:
         or not authorization.startswith("Bearer ")
         or not settings.pubsub_push_audience
     ):
+        log.warning("aviso rechazado motivo=sin_token_o_sin_audiencia_configurada")
         raise HTTPException(401, "Aviso sin autenticar")
     token = authorization.removeprefix("Bearer ")
     try:
@@ -211,11 +228,18 @@ def verify_push(authorization: str | None) -> None:
             options={"require": ["exp", "iat", "aud", "iss", "email"]},
         )
     except (jwt.PyJWTError, KeyError) as e:
+        # Solo la categoría (p. ej. InvalidAudienceError), nunca el token ni sus valores.
+        log.warning("aviso rechazado motivo=%s", type(e).__name__)
         raise HTTPException(401, "Aviso con token inválido") from e
     if (
         claims.get("email") != settings.pubsub_push_service_account
         or claims.get("email_verified") is not True
     ):
+        log.warning(
+            "aviso rechazado motivo=cuenta_de_servicio coincide=%s verificada=%s",
+            claims.get("email") == settings.pubsub_push_service_account,
+            claims.get("email_verified") is True,
+        )
         raise HTTPException(401, "Aviso de otra cuenta de servicio")
 
 
@@ -239,7 +263,6 @@ def process_notification(gmail_address: str, history_id: int) -> int:
         params = {
             "startHistoryId": conn["history_id"],
             "historyTypes": "messageAdded",
-            "labelId": "INBOX",
         }
         if page:
             params["pageToken"] = page
@@ -273,13 +296,22 @@ def process_notification(gmail_address: str, history_id: int) -> int:
             h["name"].lower(): h["value"]
             for h in meta.json().get("payload", {}).get("headers", [])
         }
-        if not mail.is_candidate(headers.get("from", ""), headers.get("subject", "")):
+        kind = mail.candidate_kind(headers.get("from", ""), headers.get("subject", ""))
+        if kind is None:
             continue  # no se descarga el correo completo
+        if not mail.allowed_location(kind, meta.json().get("labelIds", [])):
+            log.info("correo omitido motivo=carpeta tipo=%s", kind)
+            continue
         full = _gmail("GET", access, f"messages/{mid}", params={"format": "raw"})
         full.raise_for_status()
         raw = base64.urlsafe_b64decode(full.json()["raw"] + "==")
         if ingest(conn["user_id"], raw, "gmail", dedupe_key=f"gmail:{mid}") == "stored":
             stored += 1
+            # RQN 04: desde que Gmail recibió el correo (internalDate) hasta que quedó guardado.
+            received_ms = int(meta.json().get("internalDate", 0))
+            if received_ms:
+                lag = int(datetime.now(UTC).timestamp() * 1000) - received_ms
+                log.info("latencia gmail→guardado ms=%d", lag)
 
     _update(conn["user_id"], history_id=latest)
     log.info(

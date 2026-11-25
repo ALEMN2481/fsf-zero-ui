@@ -11,6 +11,11 @@ from app import gmail
 from app.auth import CurrentUser, User
 from app.config import settings
 
+# Los mensajes de la app (fsf.*) solo llevan metadatos; sin esto uvicorn solo mostraría avisos y errores.
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
+
 app = FastAPI(title="Finanzas Sin Filtro API")
 log = logging.getLogger("fsf.api")
 
@@ -87,8 +92,19 @@ def gmail_callback(
         try:
             gmail.connect(pending[0], code, pending[1])
             result = "ok"
-        except Exception:
-            log.exception("falló la conexión con gmail user=%s", pending[0])
+        except Exception as e:  # noqa: BLE001 - cualquier fallo vuelve a la app como error
+            # Solo el tipo: el mensaje o la traza de una excepción podrían llevar el código o un token.
+            detail = (
+                gmail.google_error_summary(e)
+                if isinstance(e, httpx.HTTPStatusError)
+                else ""
+            )
+            log.error(
+                "falló la conexión con gmail user=%s error=%s %s",
+                pending[0],
+                type(e).__name__,
+                detail,
+            )
     # 'status' y no 'error'/'code': supabase_flutter trataría esos parámetros como un inicio de sesión.
     return RedirectResponse(
         f"{settings.gmail_return_url}?status={result}", status_code=303

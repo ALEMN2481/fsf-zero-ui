@@ -152,8 +152,22 @@ def message_hash(msg: EmailMessage, raw: bytes, dedupe_key: str | None = None) -
     return hashlib.sha256(key.encode() if key else raw).hexdigest()
 
 
-def is_candidate(from_header: str, subject: str) -> bool:
-    """Prefiltro con solo De y Asunto: decide si vale la pena descargar el correo completo."""
+# Carpetas de Gmail que nunca se leen, aunque el correo coincida con una regla.
+EXCLUDED_LABELS = frozenset({"SENT", "DRAFT", "TRASH"})
+# D8: los bancos se aceptan también desde Spam (DKIM del banco frena la suplantación); las facturas
+# solo desde la bandeja de entrada (el phishing con "facturas" y .zip puede tener DKIM de su dominio).
+ALLOWED_LABELS = {"bank": frozenset({"INBOX", "SPAM"}), "invoice": frozenset({"INBOX"})}
+
+
+def candidate_kind(from_header: str, subject: str) -> str | None:
+    """Prefiltro con solo De y Asunto: 'bank', 'invoice' o None (no se descarga el correo completo)."""
     sender = parseaddr(from_header)[1].lower()
-    is_bank = any(sender == r.sender and not r.discard for r in BANK_RULES)
-    return is_bank or bool(_INVOICE_SUBJECT.match(subject))
+    if any(sender == r.sender and not r.discard for r in BANK_RULES):
+        return "bank"
+    return "invoice" if _INVOICE_SUBJECT.match(subject) else None
+
+
+def allowed_location(kind: str, labels: list[str]) -> bool:
+    """Según las etiquetas actuales de Gmail: ¿se puede leer este tipo de correo desde ahí?"""
+    found = set(labels)
+    return not (found & EXCLUDED_LABELS) and bool(found & ALLOWED_LABELS[kind])
