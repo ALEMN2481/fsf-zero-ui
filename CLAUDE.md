@@ -37,7 +37,8 @@ Contexto: docs/CONTEXT.md · Ruta: docs/ROADMAP.md · Bitácora: docs/CHANGELOG.
   del supervisor antes de ejecutarla.
 - Comandos de git que pueden perder trabajo (`reset --hard`, `rm --cached -r`, `clean`,
   `checkout -- .`, `push --force`, `rebase`) requieren confirmación explícita del
-  supervisor antes de ejecutarse, aunque `git status` esté limpio.
+  supervisor antes de ejecutarse, aunque `git status` esté limpio. También
+  `supabase db reset` (local o remoto) y cualquier borrado masivo de datos.
 - Si una decisión cambia la arquitectura: registrarla en CONTEXT.md §Decisiones.
 
 ## Al cerrar cada entrega (reporte obligatorio)
