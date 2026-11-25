@@ -1,0 +1,68 @@
+# Alertas Bancolombia SIMULADAS por el supervisor (no son correos reales).
+# Formatos aproximados de memoria: NO están confirmados contra alertas reales.
+# Cuenta de ahorros simulada *2222 · T.Deb *0000 · T.Cred *1111
+# Resultado esperado de cada una en esperado.json (misma clave A01, A02...).
+-----
+[A01]
+Asunto: Alertas y Notificaciones
+Bancolombia: Compraste $23.500,00 en PANADERIA EJEMPLO con tu T.Deb *0000, el 23/11/2026 a las 07:45. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A02]
+Asunto: Alertas y Notificaciones
+Bancolombia: Compraste $45.900,00 en SUPERMERCADO EJEMPLO SAS con tu T.Cred *1111, el 24/11/2026 a las 10:23. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A03]
+Asunto: Alertas y Notificaciones
+Bancolombia le informa Compra por $12.000,00 en DROGUERIA EJEMPLO 18:10. 22/11/2026 T.Deb *0000. Inquietudes al 000 000 0000.
+-----
+[A04]
+Asunto: Alertas y Notificaciones
+Bancolombia: Compraste USD15,99 en SERVICIO STREAMING EJEMPLO con tu T.Cred *1111, el 20/11/2026 a las 02:14. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A05]
+Asunto: Alertas y Notificaciones
+Bancolombia: Retiraste $200.000,00 en CAJERO EJEMPLO CENTRO con tu T.Deb *0000, el 21/11/2026 a las 15:42. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A06]
+Asunto: Alertas y Notificaciones
+Bancolombia: Transferiste $150.000,00 desde tu cuenta *2222 a la cuenta *9999 el 21/11/2026 a las 09:15. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A07]
+Asunto: Alertas y Notificaciones
+Bancolombia: Recibiste un pago de nomina por $2.500.000,00 de EMPRESA EMPLEADORA EJEMPLO SAS en tu cuenta *2222, el 15/11/2026 a las 06:00. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A08]
+Asunto: Alertas y Notificaciones
+Bancolombia: Recibiste una transferencia por $80.000,00 de PERSONA EJEMPLO en tu cuenta *2222, el 19/11/2026 a las 20:31. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A09]
+Asunto: Alertas y Notificaciones
+Bancolombia: Pagaste $95.300,00 a EMPRESA DE ENERGIA EJEMPLO por PSE desde tu cuenta *2222, el 18/11/2026 a las 11:05. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A10]
+Asunto: Alertas y Notificaciones
+Bancolombia: Pagaste la factura de INTERNET EJEMPLO por $79.900,00 desde tu cuenta *2222, el 17/11/2026 a las 08:00. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A11]
+Asunto: Alertas y Notificaciones
+Bancolombia: Pagaste $500.000,00 a tu T.Cred *1111 desde tu cuenta *2222, el 16/11/2026 a las 12:00. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A12]
+Asunto: Alertas y Notificaciones
+Bancolombia: Tu compra por $300.000,00 en TIENDA EJEMPLO ONLINE con tu T.Cred *1111 no fue exitosa, el 22/11/2026 a las 21:10. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A13]
+Asunto: Alertas y Notificaciones
+Bancolombia: Recibiste una devolución por $45.900,00 de SUPERMERCADO EJEMPLO SAS en tu T.Cred *1111, el 25/11/2026 a las 09:00. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A14]
+Asunto: Alertas y Notificaciones
+Bancolombia: Hiciste un avance por $100.000,00 con tu T.Cred *1111 en CAJERO EJEMPLO NORTE, el 23/11/2026 a las 19:00. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A15]
+Asunto: Alertas y Notificaciones
+Bancolombia: Pagaste $18.000,00 con codigo QR a CAFETERIA EJEMPLO desde tu cuenta *2222, el 24/11/2026 a las 13:30. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
+-----
+[A16]
+Asunto: Alertas y Notificaciones
+Bancolombia: Compraste $7.800 en TIENDA DE BARRIO EJEMPLO con tu T.Deb *0000, el 24/11/2026 a las 19:02. Si tienes dudas, encuentranos aqui: 000 000 0000. Estamos cerca.
