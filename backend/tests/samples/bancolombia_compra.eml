@@ -1,0 +1,32 @@
+Authentication-Results: mx.google.com;dkim=pass
+ header.i=@notificacionesbancolombia.com header.s=ejemplo
+ header.b=AbCdEf12;spf=pass
+ smtp.mailfrom=alertasynotificaciones@notificacionesbancolombia.com;dmarc=pass
+ (p=REJECT) header.from=notificacionesbancolombia.com
+From: Alertas y Notificaciones
+ <alertasynotificaciones@notificacionesbancolombia.com>
+To: usuario.ejemplo@gmail.com
+Subject: Alertas y Notificaciones
+Date: Tue, 24 Nov 2026 10:15:00 -0500
+Message-ID: <ejemplo-0001@notificacionesbancolombia.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============6158014563110979549=="
+
+--===============6158014563110979549==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+EJEMPLO: Bancolombia le informa Compra por $45.900,00 en COMERCIO EJEMPLO 24/=
+11/2026 10:15 con T.Cred *1234. MARCADOR-CUERPO-7F3A
+
+--===============6158014563110979549==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<html><body><p>EJEMPLO: Bancolombia le informa Compra por $45.900,00 en COMER=
+CIO EJEMPLO 24/11/2026 10:15 con T.Cred *1234. MARCADOR-CUERPO-7F3A</p></body=
+></html>
+
+--===============6158014563110979549==--

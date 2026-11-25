@@ -1,3 +1,4 @@
 fastapi[standard]==0.115.*
 pydantic-settings==2.*
 pyjwt[crypto]==2.*
+cryptography==50.*  # AES-GCM de los correos (Paso 08)

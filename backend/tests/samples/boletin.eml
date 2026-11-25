@@ -1,0 +1,11 @@
+Authentication-Results: mx.google.com;dkim=pass
+ header.i=@tienda-ejemplo.example header.s=s1 header.b=QqQq1111
+From: Ofertas <ofertas@tienda-ejemplo.example>
+To: usuario.ejemplo@gmail.com
+Subject: EJEMPLO: 50% de descuento
+Message-ID: <ejemplo-0005@tienda-ejemplo.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+EJEMPLO: ofertas de la semana.

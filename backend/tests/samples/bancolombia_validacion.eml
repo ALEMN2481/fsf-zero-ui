@@ -1,0 +1,26 @@
+Authentication-Results: mx.google.com;dkim=pass
+ header.i=@notificacionesbancolombia.com header.s=ejemplo header.b=AbCdEf12
+From: Alertas y Notificaciones
+ <validaciondeseguridad@notificacionesbancolombia.com>
+To: usuario.ejemplo@gmail.com
+Subject: =?utf-8?q?Validaci=C3=B3n?= de seguridad
+Date: Tue, 24 Nov 2026 10:15:00 -0500
+Message-ID: <ejemplo-0004@notificacionesbancolombia.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============0702881147777290878=="
+
+--===============0702881147777290878==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+EJEMPLO: confirma la transacción en la app.
+
+--===============0702881147777290878==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+
+<html><body><p>EJEMPLO: confirma la transacción en la app.</p></body></html>
+
+--===============0702881147777290878==--

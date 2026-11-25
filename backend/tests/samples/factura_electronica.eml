@@ -1,0 +1,38 @@
+Authentication-Results: mx.google.com;dkim=pass
+ header.i=@facturacion.comercio-ejemplo.example header.s=s1 header.b=FeFe2222
+From: Comercio Ejemplo SAS <facturas@facturacion.comercio-ejemplo.example>
+To: usuario.ejemplo@gmail.com
+Subject: 900000000;COMERCIO EJEMPLO SAS;FE-EJEMPLO-1001;01;COMERCIO EJEMPLO
+Message-ID: <ejemplo-0006@facturacion.comercio-ejemplo.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============3860897869542929503=="
+
+--===============3860897869542929503==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+EJEMPLO: adjuntamos su factura electrónica.
+
+--===============3860897869542929503==
+Content-Type: application/zip
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="z0900000000001.zip"
+MIME-Version: 1.0
+
+UEsDBBQAAAAIAIepeF2S3ivd6AAAAIoBAAATAAAAYWQwOTAwMDAwMDAwMDAxLnhtbJXQUU/DIBAH
+8Pd+CsI7GzTGKKFdnO2SGZ0+zA9AKTqSwTW9dtnH9+JwD3uTlwPuf78EzOocj+zkRwyQKq4WkjOf
+HPQhfVf8c78RD3xVF+Zpmqw7+L4BN0efJkZjCSs+j0mDxYA62ehR4+Bd+ArOTuTpuTtqpLFo9Rl7
+fYuIkhfsImnXuX9qzxAjpDXFHW0HSCQikTWZhji9bepNK9qX9u3j9V0oKZVZ5vtrBHH2jZ18Xcry
+Xiglyrscunb+sjugQ9Y06/MbgIV0omp7YIMdLRvG2XcWF2y33bNHmZeQF/YXKczy9ivq4gdQSwEC
+FAAUAAAACACHqXhdkt4r3egAAACKAQAAEwAAAAAAAAAAAAAAgAEAAAAAYWQwOTAwMDAwMDAwMDAx
+LnhtbFBLBQYAAAAAAQABAEEAAAAZAQAAAAA=
+
+--===============3860897869542929503==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="representacion.pdf"
+MIME-Version: 1.0
+
+JVBERi0xLjQgRUpFTVBMTw==
+
+--===============3860897869542929503==--
