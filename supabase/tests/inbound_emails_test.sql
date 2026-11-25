@@ -52,7 +52,8 @@ select throws_ok($$select public.purge_inbound_emails()$$, '42501', null, 'A no 
 reset role;
 select is(public.purge_inbound_emails(), 2, 'la retención vacía 2 correos (extraído > 30 días y pendiente > 90 días)');
 select results_eq(
-  $$select id::text from public.inbound_emails where raw_encrypted is not null order by id$$,
+  $$select id::text from public.inbound_emails where raw_encrypted is not null
+      and user_id in ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b') order by id$$,
   $$values ('00000000-0000-0000-0000-0000000000a1'), ('00000000-0000-0000-0000-0000000000b1'), ('00000000-0000-0000-0000-0000000000b4')$$,
   'conserva el contenido de los recientes');
 
