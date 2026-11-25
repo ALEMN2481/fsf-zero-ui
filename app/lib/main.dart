@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:local_auth/local_auth.dart';
+import 'package:local_auth_android/local_auth_android.dart';
+import 'package:local_auth_darwin/local_auth_darwin.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth_screen.dart';
@@ -18,6 +20,16 @@ const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 const lockAfter = Duration(minutes: 5);
 const lockWarning = 'Activa un bloqueo de pantalla para proteger tu información';
 const _lockWarningShownKey = 'lock_warning_shown';
+
+/// Textos del diálogo del sistema; sin ellos Android e iOS los muestran en inglés.
+const unlockMessages = <AuthMessages>[
+  AndroidAuthMessages(
+    signInTitle: 'Finanzas Sin Filtro',
+    signInHint: 'Usa tu huella o el bloqueo de pantalla',
+    cancelButton: 'Cancelar',
+  ),
+  IOSAuthMessages(cancelButton: 'Cancelar', localizedFallbackTitle: 'Usar código'),
+];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +60,7 @@ class FsfApp extends StatefulWidget {
     required this.deviceLock,
     required this.client,
     this.now = DateTime.now,
+    this.openUrl = openInBrowser,
   });
 
   final GoTrueClient auth;
@@ -56,6 +69,7 @@ class FsfApp extends StatefulWidget {
   final LocalAuthentication deviceLock;
   final http.Client client;
   final DateTime Function() now;
+  final Future<bool> Function(Uri url) openUrl;
 
   @override
   State<FsfApp> createState() => _FsfAppState();
@@ -114,7 +128,10 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
   Future<void> _unlock() async {
     var ok = false;
     try {
-      ok = await widget.deviceLock.authenticate(localizedReason: 'Desbloquea Finanzas Sin Filtro');
+      ok = await widget.deviceLock.authenticate(
+        localizedReason: 'Desbloquea la app para ver tu información',
+        authMessages: unlockMessages,
+      );
     } on LocalAuthException catch (e) {
       if (e.code == LocalAuthExceptionCode.noCredentialsSet) {
         ok = true; // se quitó el bloqueo del dispositivo mientras tanto
@@ -158,7 +175,7 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
     final session = widget.auth.currentSession;
     final Widget home;
     if (session == null) {
-      home = AuthScreen(auth: widget.auth);
+      home = AuthScreen(auth: widget.auth, openUrl: widget.openUrl);
     } else if (_locked) {
       home = LockScreen(onUnlock: _unlock);
     } else {

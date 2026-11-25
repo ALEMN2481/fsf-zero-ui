@@ -31,5 +31,28 @@ void main() {
     expect(find.text('Conectando…'), findsOneWidget);
     await tester.pump(healthTimeout + const Duration(seconds: 1));
     expect(find.text('Backend no disponible'), findsOneWidget);
+    await tester.pump(meTimeout); // deja vencer también la espera de /me
+  });
+
+  group('/me', () {
+    MockClient slowMe(Duration delay) => MockClient((r) async {
+      if (r.url.path == '/me') await Future<void>.delayed(delay);
+      return http.Response('{"status":"ok"}', 200);
+    });
+
+    testWidgets('espera hasta 10 s la primera respuesta', (tester) async {
+      await tester.pumpWidget(home(slowMe(const Duration(seconds: 7))));
+      await tester.pump(const Duration(seconds: 6));
+      expect(find.text('Verificando sesión…'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('Sesión verificada'), findsOneWidget);
+    });
+
+    testWidgets('pasados 10 s sin respuesta muestra no verificada', (tester) async {
+      await tester.pumpWidget(home(slowMe(const Duration(minutes: 1))));
+      await tester.pump(meTimeout + const Duration(seconds: 1));
+      expect(find.text('Sesión no verificada'), findsOneWidget);
+      await tester.pump(const Duration(minutes: 1)); // deja terminar el temporizador del mock
+    });
   });
 }

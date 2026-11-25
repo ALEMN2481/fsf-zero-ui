@@ -8,6 +8,9 @@ const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:
 
 const healthTimeout = Duration(seconds: 5);
 
+/// /me valida el token: la primera llamada puede tardar más (el backend descarga el JWKS).
+const meTimeout = Duration(seconds: 10);
+
 /// Pantalla principal provisional: estado del backend y sesión validada por /me.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.client, required this.token, required this.onSignOut});
@@ -33,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<String> _checkMe() async {
     final res = await widget.client
         .get(Uri.parse('$apiUrl/me'), headers: {'Authorization': 'Bearer ${widget.token}'})
-        .timeout(healthTimeout);
+        .timeout(meTimeout);
     return res.statusCode == 200 ? 'Sesión verificada' : 'Sesión no verificada';
   }
 

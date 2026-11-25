@@ -16,7 +16,11 @@ jobs:
         with:
           version: 3.3.0 # misma versión que la CLI local
       # db + auth + mailpit (el registro con confirmación de correo envía un email).
-      - run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta
+      # Google necesita credenciales para arrancar; en la CI basta con valores ficticios.
+      - env:
+          SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: ci-no-usado
+          SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET: ci-no-usado
+        run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta
       - run: supabase test db
       - uses: actions/setup-python@v5
         with:

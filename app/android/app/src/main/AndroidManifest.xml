@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
-        android:label="fsf_app"
+        android:label="Finanzas Sin Filtro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

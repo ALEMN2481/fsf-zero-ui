@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-/// Enlace al que vuelve la app tras confirmar el correo (y, en la Parte B, tras Google).
+/// Enlace al que vuelve la app tras confirmar el correo o iniciar sesión con Google.
 const authRedirect = 'co.finanzassinfiltro.fsfapp://login-callback';
 
 final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
+/// Abre la página de Google fuera de la app (Google no permite el inicio de sesión en un WebView).
+Future<bool> openInBrowser(Uri url) => launchUrl(url, mode: LaunchMode.externalApplication);
+
 /// Registro e inicio de sesión en un solo formulario de 2 campos (RQN 05).
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key, required this.auth});
+  const AuthScreen({super.key, required this.auth, this.openUrl = openInBrowser});
 
   final GoTrueClient auth;
+  final Future<bool> Function(Uri url) openUrl;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -34,19 +39,32 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
+    await _run(() async {
+      final email = _email.text.trim();
+      if (!_register) {
+        await widget.auth.signInWithPassword(email: email, password: _password.text);
+        return null;
+      }
+      await widget.auth.signUp(email: email, password: _password.text, emailRedirectTo: authRedirect);
+      return 'Revisa tu correo para confirmar la cuenta';
+    });
+  }
+
+  /// Google: la sesión llega luego por el enlace de vuelta (supabase_flutter la recoge).
+  Future<void> _google() => _run(() async {
+    final res = await widget.auth.getOAuthSignInUrl(provider: OAuthProvider.google, redirectTo: authRedirect);
+    return await widget.openUrl(Uri.parse(res.url)) ? null : 'No se pudo abrir el navegador';
+  });
+
+  /// Ejecuta [action] con el formulario ocupado y muestra su mensaje o el del error.
+  Future<void> _run(Future<String?> Function() action) async {
     setState(() {
       _busy = true;
       _message = null;
     });
     String? message;
     try {
-      final email = _email.text.trim();
-      if (_register) {
-        await widget.auth.signUp(email: email, password: _password.text, emailRedirectTo: authRedirect);
-        message = 'Revisa tu correo para confirmar la cuenta';
-      } else {
-        await widget.auth.signInWithPassword(email: email, password: _password.text);
-      }
+      message = await action();
     } on AuthException catch (e) {
       message = authErrorMessage(e);
     } catch (_) {
@@ -102,6 +120,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 24),
                   FilledButton(onPressed: _busy ? null : _submit, child: Text(_register ? 'Crear cuenta' : 'Entrar')),
+                  const SizedBox(height: 12),
+                  OutlinedButton(onPressed: _busy ? null : _google, child: const Text('Continuar con Google')),
                   TextButton(
                     onPressed: _busy
                         ? null

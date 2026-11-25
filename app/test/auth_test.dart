@@ -9,6 +9,7 @@ import 'package:fsf_app/session_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:local_auth_android/local_auth_android.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final user = {
@@ -35,6 +36,7 @@ class FakeLock extends Fake implements LocalAuthentication {
   bool supported;
   final List<bool> answers;
   int prompts = 0;
+  Iterable<Object> messages = const [];
 
   @override
   Future<bool> isDeviceSupported() async => supported;
@@ -47,6 +49,7 @@ class FakeLock extends Fake implements LocalAuthentication {
     bool sensitiveTransaction = true,
     bool persistAcrossBackgrounding = false,
   }) async {
+    messages = authMessages;
     final answer = answers[prompts.clamp(0, answers.length - 1)];
     prompts++;
     return answer;
@@ -73,6 +76,8 @@ class Harness {
     flowType: AuthFlowType.implicit,
   );
 
+  final opened = <Uri>[];
+
   final backend = MockClient((r) async => http.Response('{"status":"ok"}', 200));
 
   Widget app(FakeLock lock) => FsfApp(
@@ -82,6 +87,10 @@ class Harness {
     deviceLock: lock,
     client: backend,
     now: () => clock,
+    openUrl: (url) async {
+      opened.add(url);
+      return true;
+    },
   );
 
   Future<void> restoreSession() => auth.setInitialSession(jsonEncode(sessionJson()));
@@ -149,6 +158,18 @@ void main() {
     });
   });
 
+  testWidgets('Continuar con Google abre Google con el enlace de vuelta a la app', (tester) async {
+    final h = Harness();
+    await tester.pumpWidget(h.app(FakeLock()));
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pumpAndSettle();
+    final url = h.opened.single;
+    expect(url.path, '/auth/v1/authorize');
+    expect(url.queryParameters['provider'], 'google');
+    expect(url.queryParameters['redirect_to'], authRedirect);
+    expect(find.byType(TextFormField), findsNWidgets(2)); // el botón no añade campos
+  });
+
   group('bloqueo local', () {
     testWidgets('al abrir con sesión guardada pide desbloqueo; si falla, sigue bloqueada', (tester) async {
       final h = Harness();
@@ -163,6 +184,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Cerrar sesión'), findsOneWidget);
       expect(lock.prompts, 2);
+      final android = lock.messages.whereType<AndroidAuthMessages>().single;
+      expect(android.cancelButton, 'Cancelar'); // diálogo del sistema en español
     });
 
     testWidgets('vuelve a bloquear tras 5 minutos o más en segundo plano, no antes', (tester) async {
