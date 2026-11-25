@@ -10,6 +10,19 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 09 (cierre) — Ventana del LLM y servidor MCP de demostración
+- RQ: RQF 02, RQN 01, RQN 03 (Paso 9 completo: 9A, 9B, 9C)
+- Cambios:
+  - Corrección (`a699a6d`): la ventana de ±3 días del LLM se mide contra `inbound_emails.received_at` (la ingesta la recibe al insertar y la pasa a `pipeline.process`), no contra `datetime.now()`: un reproceso posterior ya no rechaza la fecha. Test: reproceso de un correo llegado hace 10 días → movimiento `pending_review`; con `now()` la misma respuesta daría `fecha` (mutación verificada: el test falla).
+  - Servidor MCP (`a8103a2`, D9): `backend/app/mcp_server.py`, SDK oficial `mcp` 1.30 (la 2.x sube `starlette` a 1.x, incompatible con FastAPI 0.115), transporte stdio. Herramientas `extract_bank_alert(text, received_at?)` (plantillas y, si no encaja, LLM local; siempre `status` `confirmed`/`pending_review`/`no_movement` y `source`) y `parse_amount(text)` (`parse_cop`). Sin BD (no importa `service_db` ni `pipeline`), sin secretos (`FSF_ENV_FILE=""`: no lee `backend/.env`, y vacía las claves que lleguen por el entorno), red solo hacia un Ollama local (otra `OLLAMA_URL` desactiva el LLM). Instrucciones de MCP Inspector en el `README.md`.
+- Verificación:
+  - `test_mcp_server.py` (7): cliente MCP en memoria → lista exactamente las 2 herramientas; plantilla → `confirmed`; pago de tarjeta → `no_movement`; fuera de plantilla → LLM → `pending_review`; sin LLM → `pending_review` con motivo; `parse_amount` correcto y con error; proceso propio con secretos y URL externa en el entorno → sin secretos, LLM desactivado y sin módulos de BD.
+  - Prueba real por stdio (cliente MCP lanzando `python -m app.mcp_server`): `parse_amount("COP 50.000")` → `50000.00`; alerta con plantilla → `confirmed` en 0,01 s; alerta fuera de plantilla → Ollama `qwen2.5:3b` → `pending_review` en 13,7 s (el modelo había salido de memoria). MCP Inspector no se ejecutó en esta sesión (descargar y ejecutar el paquete con `npx` no estaba autorizado); las instrucciones siguen su uso documentado.
+  - Backend con Supabase local → `196 passed`; sin Supabase → `185 passed, 11 skipped`; `npx supabase test db` → PASS; ruff OK. Conjunto del supervisor: 22/22, 0 confirmados con monto equivocado.
+- **Precisión del Paso 9 medida solo con datos simulados**: conjunto del supervisor (16 alertas + 6 facturas, 100 % por campo, 0 montos equivocados) y 15 alertas inventadas fuera de plantilla para el LLM (`qwen2.5:3b`: 92–100 % por campo, 0 montos aceptados erróneamente). **La medición con correos reales anonimizados queda pendiente antes del Paso 16** (ROADMAP).
+- Pendientes/riesgos: formatos reales de alertas y facturas sin confirmar; firma XAdES (Paso 15); extracción sin bloqueo por usuario y sin reproceso automático de `pending_extraction` (antes del Paso 16); Ollama necesario en producción (D10); con el modelo fuera de memoria el LLM tarda ~12–14 s.
+- Siguiente: Paso 10 (categorización), tras la aprobación del supervisor.
+
 ## 2026-11-25 · Paso 09C (parte 1) — Respaldo con LLM local (Ollama) elegido midiendo
 - RQ: RQF 02, RQN 01, RQN 03, RQN 04
 - Alcance: puntos 10–13 del supervisor y el plan aprobado del 9C. **Los puntos 1–9 no llegaron al agente**; el servidor MCP de demostración queda pendiente de ellos. Decisión **D10** (`CONTEXT.md`): LLM local con Ollama.
