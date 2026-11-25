@@ -7,6 +7,12 @@ from app import auth
 from app.config import settings
 
 
+@pytest.fixture(autouse=True)
+def no_local_llm(monkeypatch):
+    """Los tests no dependen de si Ollama está en marcha; los que lo usan lo simulan."""
+    monkeypatch.setattr(settings, "ollama_url", "")
+
+
 @pytest.fixture
 def users(monkeypatch):
     """Dos usuarios confirmados (a y b) en el Supabase local; se borran al terminar."""

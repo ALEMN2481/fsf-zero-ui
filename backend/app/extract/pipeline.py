@@ -15,7 +15,7 @@ from decimal import Decimal
 from email.message import EmailMessage
 
 from app import service_db
-from app.extract import bancolombia, invoice
+from app.extract import bancolombia, invoice, llm
 from app.extract.bancolombia import COLOMBIA, Alert
 from app.ingest.mail import INVOICE_RULE
 
@@ -112,12 +112,19 @@ def _update(tx_id: str, row: dict) -> None:
 
 
 def _process_alert(user_id: str, email_id: str, msg: EmailMessage) -> str:
-    alert = bancolombia.parse_alert(body_text(msg))
+    text = body_text(msg)
+    alert = bancolombia.parse_alert(text)
     if alert.status == "no_movement":
         return "extracted"
-    if alert.status != "confirmed":
+    if (
+        alert.reason == "sin_plantilla"
+    ):  # solo lo que no encaja en ninguna plantilla va al LLM
+        alert = llm.extract(text, datetime.now(UTC))
+    if alert.status not in ("confirmed", "pending_review") or alert.amount is None:
         log.info("alerta para revisión id=%s motivo=%s", email_id, alert.reason)
         return "pending_review"
+    # Lo que viene del LLM nunca se confirma solo.
+    status = "confirmed" if alert.status == "confirmed" else "pending_review"
     row = {
         "direction": alert.direction,
         "amount": str(alert.amount),
@@ -126,7 +133,7 @@ def _process_alert(user_id: str, email_id: str, msg: EmailMessage) -> str:
         "payment_method": alert.payment_method,
         "account_id": _account_id(user_id, alert.last4),
         "source_ref": f"bank:{email_id}",
-        "status": "confirmed",
+        "status": status,
     }
     pending_invoices = _txs(
         user_id,
@@ -144,7 +151,7 @@ def _process_alert(user_id: str, email_id: str, msg: EmailMessage) -> str:
             {
                 **row,
                 "user_id": user_id,
-                "status": "pending_review" if action == "review" else "confirmed",
+                "status": "pending_review" if action == "review" else status,
             }
         )
     log.info(

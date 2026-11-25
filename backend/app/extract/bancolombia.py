@@ -126,7 +126,9 @@ _CARD_METHOD = {"t.deb": "debit_card", "t.cred": "credit_card"}
 
 @dataclass(frozen=True)
 class Alert:
-    status: str  # confirmed | pending_review | no_movement
+    status: (
+        str  # confirmed | pending_review | no_movement | failed (LLM sin datos válidos)
+    )
     reason: str | None = None
     template: str | None = None
     direction: str | None = None

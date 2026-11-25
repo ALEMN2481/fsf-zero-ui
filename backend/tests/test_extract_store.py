@@ -67,7 +67,7 @@ def env(users, monkeypatch):
     return a["id"], account[0]["id"]
 
 
-def alert_email(key: str) -> bytes:
+def alert_email(key: str, text: str | None = None) -> bytes:
     msg = EmailMessage()
     msg["Authentication-Results"] = (
         "mx.google.com; dkim=pass header.d=notificacionesbancolombia.com header.s=s1"
@@ -77,7 +77,7 @@ def alert_email(key: str) -> bytes:
     )
     msg["Subject"] = "Alertas y Notificaciones"
     msg["Message-ID"] = f"<{uuid.uuid4()}@notificacionesbancolombia.com>"
-    msg.set_content(ALERTS[key])
+    msg.set_content(text or ALERTS[key])
     return msg.as_bytes()
 
 
@@ -167,3 +167,44 @@ def test_review_and_no_movement_cases(env):
         "pending_review",  # A04 sin plantilla
         "pending_review",  # F04 comprador distinto
     ]
+
+
+OUTSIDE = (
+    "Bancolombia: Recibiste $120.000,00 de JUAN INVENTADO en tu cuenta de ahorros *2222 "
+    "el {date} a las 08:12."
+)
+
+
+def test_alert_outside_templates_goes_through_llm_to_review(env, monkeypatch):
+    from datetime import datetime
+
+    from app.extract import llm
+
+    user_id, _ = env
+    today = datetime.now(llm.COLOMBIA).strftime("%d/%m/%Y")
+    text = OUTSIDE.format(date=today)
+    answer = {
+        "amount": "$120.000,00",
+        "direction": "income",
+        "merchant": "JUAN INVENTADO",
+        "date": today,
+        "time": "08:12",
+        "payment_method": "transfer",
+        "last4": "2222",
+    }
+    monkeypatch.setattr(settings, "ollama_url", "http://ollama.test")
+    monkeypatch.setattr(llm, "ask", lambda t, **kw: __import__("json").dumps(answer))
+    assert ingest(user_id, alert_email("", text)) == "stored"
+
+    monkeypatch.setattr(
+        llm, "ask", lambda t, **kw: (_ for _ in ()).throw(httpx.ConnectError("caído"))
+    )
+    assert ingest(user_id, alert_email("", text.replace("08:12", "09:30"))) == "stored"
+
+    [tx] = txs(user_id)  # solo el primero: el segundo no tiene datos
+    assert (tx["amount"], tx["status"], tx["payment_method"]) == (
+        "120000.00",
+        "pending_review",
+        "transfer",
+    )
+    assert statuses(user_id) == ["extracted", "pending_review"]

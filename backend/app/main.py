@@ -1,6 +1,8 @@
 import base64
 import json
 import logging
+import threading
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 import httpx
@@ -10,13 +12,22 @@ from fastapi.responses import RedirectResponse
 from app import gmail
 from app.auth import CurrentUser, User
 from app.config import settings
+from app.extract import llm
 
 # Los mensajes de la app (fsf.*) solo llevan metadatos; sin esto uvicorn solo mostraría avisos y errores.
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
 )
 
-app = FastAPI(title="Finanzas Sin Filtro API")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Precarga el LLM de respaldo en segundo plano: el arranque no espera ni falla si Ollama no está.
+    threading.Thread(target=llm.preload, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Finanzas Sin Filtro API", lifespan=lifespan)
 log = logging.getLogger("fsf.api")
 
 

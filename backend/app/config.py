@@ -28,5 +28,15 @@ class Settings(BaseSettings):
     pubsub_push_service_account: str = ""
     pubsub_push_audience: str = ""
 
+    # LLM local de respaldo (Paso 09C, D9). Sin URL, el respaldo queda desactivado.
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5:3b"  # elegido midiendo (Paso 09C): ver CHANGELOG
+    ollama_keep_alive: str = (
+        "30m"  # cuánto queda el modelo en memoria tras cada llamada
+    )
+    ollama_timeout: float = (
+        30.0  # s; la primera llamada con el modelo descargado tarda ~13 s
+    )
+
 
 settings = Settings()
