@@ -10,6 +10,41 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 10 — Categorización
+- RQ: RQF 03, RQN 01, RQN 04 (el LLM no retrasa el aviso). Decisión **D11** (`CONTEXT.md`).
+- Antes del paso: `chore: normaliza finales de línea a LF` (`e3ac33a`, `.gitattributes` con `* text=auto eol=lf`) y nueva regla en `CLAUDE.md`: los comandos de git que pueden perder trabajo requieren confirmación del supervisor (`653df80`).
+- Cambios:
+  - Migración `20261125030000_categorization.sql` (`e451b26`): categoría global **Ingresos**; `transactions.category_source` (`direccion`, `regla_usuario`, `regla`, `pendiente`, `llm`, `otros`, `usuario`); tabla `category_rules` (`user_id`, `merchant_key`, `category_id`; una regla por comercio) con RLS: solo reglas propias y solo hacia categorías globales o propias. pgTAP `categorization_test.sql` (9).
+  - `backend/app/categorize/` (`4800f65`): `rules.toml` (reglas globales revisables) y la lógica. En línea al insertar: ingreso → Ingresos (salvo devolución, por comercio); regla propia; regla global si encaja en una sola categoría (palabra completa, sin tildes); si no, Otros `pendiente`. `run_pending` pasa los pendientes por el LLM en un hilo de fondo (`schedule`, al final de `pipeline.process`) y escribe con la condición `category_source=eq.pendiente`. LLM caído → siguen `pendiente` (se reintentan); respuesta inválida → Otros `otros`.
+  - `llm.ask_category`: solo el nombre del comercio; esquema con `enum` de las categorías del usuario (sin Ingresos) y comprobación posterior; descripción breve de las categorías globales en el prompt.
+  - API: `GET /categories` (globales + propias) y `PATCH /transactions/{id}/category` `{category_id}` con el JWT del usuario (RLS): 404 si el movimiento no es suyo, 422 si la categoría no es suya ni global; marca `usuario` y crea o actualiza la regla del comercio.
+  - `scripts/categorize_backfill.py`: categoriza los movimientos sin categoría y los `pendiente`; si `SUPABASE_URL` no es local exige `--remote` (**no ejecutado contra la nube**: requiere confirmación). `scripts/eval_categories.py`: medición del LLM.
+- Tabla de reglas globales (`rules.toml`; palabra completa, mayúsculas, sin tildes):
+
+  | Categoría | Palabras clave |
+  |---|---|
+  | Alimentos | SUPERMERCADO, MINIMERCADO, EXITO, CARULLA, OLIMPICA, JUMBO, D1, ARA, ISIMO, MAKRO, PANADERIA, CAFE, CAFETERIA, RESTAURANTE, ASADERO, PIZZERIA, FRUVER, CARNICERIA, JUAN VALDEZ, TOSTAO, CREPES, EL CORRAL, FRISBY, RAPPI |
+  | Transporte | UBER, DIDI, CABIFY, INDRIVE, TAXI, TRANSMILENIO, METRO DE MEDELLIN, TERPEL, PRIMAX, BIOMAX, ESSO, TEXACO, GASOLINERA, ESTACION DE SERVICIO, PEAJE, PARQUEADERO, AVIANCA, LATAM, WINGO |
+  | Entretenimiento | NETFLIX, SPOTIFY, DISNEY, HBO, PRIME VIDEO, YOUTUBE, STEAM, PLAYSTATION, XBOX, CINE, CINEMA, CINEMARK, PROCINAL, TEATRO, GIMNASIO, SMARTFIT, BODYTECH |
+  | Servicios | CLARO, MOVISTAR, TIGO, WOM, ETB, EPM, ENEL, CODENSA, VANTI, AFINIA, AIR-E, ACUEDUCTO, ENERGIA, GAS NATURAL, INTERNET, TELEFONIA |
+  | Salud | DROGUERIA, FARMACIA, FARMATODO, CRUZ VERDE, LOCATEL, COLSANITAS, SURA, COMPENSAR, CLINICA, HOSPITAL, LABORATORIO, ODONTOLOGIA, OPTICA |
+  | Otros | CAJERO (retiros y avances) |
+  | Ingresos | por dirección `income`, nunca por comercio (salvo devoluciones) |
+
+- Verificación:
+  - `test_categorize.py` (45): 27 comercios conocidos → su categoría; 8 sin regla (`ARANDANOS`, `ARAÑA`, `CINEMATOGRAFIA`…); dos categorías a la vez → sin regla; cada palabra clave lleva sola a su categoría; respuestas del LLM inventadas o con campos de más → `None`; `schedule` solo lanza el hilo con LLM configurado.
+  - `test_categorize_store.py` (8, Supabase local): conjunto del supervisor completo (16 alertas + 6 facturas) → **0 movimientos sin categoría**, con nómina y transferencia recibida en Ingresos, la devolución A13 en Alimentos por regla y 2 `pendiente` que el LLM (simulado) resuelve; corrección → regla del usuario usada por el siguiente movimiento del mismo comercio y no por otro usuario; 401/404/422 del endpoint; **carrera**: el usuario corrige mientras el LLM responde → gana el usuario (mutación verificada: sin la condición `pendiente` el test falla); LLM caído → sigue `pendiente`; backfill.
+  - `npx supabase test db` → PASS (59); backend con Supabase local → `249 passed`; sin Supabase → `230 passed, 19 skipped`; ruff OK.
+  - Medición del LLM (`python -m scripts.eval_categories`, `qwen2.5:3b`, **comercios inventados**): solo con los nombres de las categorías, 8/18 (44 %); con descripción breve de cada categoría, 15/18 (83 %) en los casos usados para ajustar el prompt y **6/12 (50 %) en casos nuevos**, escritos después; casi todos los fallos van a Otros (1 error con categoría equivocada: centro médico → Servicios). Latencia en caliente ~0,7 s, en frío ~12,6 s; no afecta al aviso.
+- Pendientes/riesgos:
+  - Las reglas aprendidas comparan el comercio exacto (`EXITO CALLE 80` ≠ `EXITO LAURELES`).
+  - Las devoluciones anteriores al Paso 10 no guardan su plantilla: el backfill las deja en Ingresos (el usuario puede corregirlas).
+  - Si una factura completa una alerta, cambia el comercio pero no se recategoriza.
+  - El LLM de categorías acierta la mitad en casos nuevos y prefiere Otros; medido con datos simulados.
+  - El hilo de fondo no es persistente: si el proceso se reinicia, los `pendiente` los recoge el backfill; con varias instancias hará falta una cola (Paso 16).
+  - Backfill contra la nube: pendiente de confirmación del supervisor.
+- Siguiente: Paso 11 (motor financiero GPS), tras la aprobación del supervisor.
+
 ## 2026-11-25 · Paso 09 (cierre) — Ventana del LLM y servidor MCP de demostración
 - RQ: RQF 02, RQN 01, RQN 03 (Paso 9 completo: 9A, 9B, 9C)
 - Cambios:
