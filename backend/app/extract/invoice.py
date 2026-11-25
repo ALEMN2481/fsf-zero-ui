@@ -18,6 +18,8 @@ from xml.etree.ElementTree import Element, ParseError
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring
 
+from app.extract.amounts import MAX_AMOUNT
+
 # ---------------------------------------------------------------- límites del .zip
 MAX_FILES = 10
 MAX_UNCOMPRESSED = 5 * 1024 * 1024  # bytes, suma de los XML leídos
@@ -175,7 +177,8 @@ def _invoice(root: Element) -> Invoice:
         raise InvoiceError("xml_valor_invalido") from None
     if issued_at.tzinfo is None:
         issued_at = issued_at.replace(tzinfo=COLOMBIA)
-    if not total.is_finite() or total <= 0:
+    # Mismo rango que parse_cop (cabe en numeric(14, 2)): fuera de él, revisión y no un fallo al insertar.
+    if not total.is_finite() or not 0 < total <= MAX_AMOUNT:
         raise InvoiceError("xml_valor_invalido")
     codes = {(c.text or "").strip() for c in root.findall(INV_PAYMENT, NS)}
     return Invoice(

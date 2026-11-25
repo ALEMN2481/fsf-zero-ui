@@ -3,7 +3,7 @@
 import re
 from decimal import Decimal
 
-_MAX = Decimal("999999999999.99")  # transactions.amount es numeric(14, 2)
+MAX_AMOUNT = Decimal("999999999999.99")  # transactions.amount es numeric(14, 2)
 _NUMBER = re.compile(r"\d[\d.,]*")
 _THOUSANDS = re.compile(r"\d{1,3}(?:[.,]\d{3})+")
 
@@ -32,6 +32,6 @@ def parse_cop(text: str) -> Decimal:
             raise ValueError(f"monto ambiguo: {text!r}")
         integer = re.sub(r"[.,]", "", integer)
     amount = Decimal(f"{integer}.{decimals or '0'}").quantize(Decimal("0.01"))
-    if not 0 < amount <= _MAX:
+    if not 0 < amount <= MAX_AMOUNT:
         raise ValueError(f"monto fuera de rango: {text!r}")
     return amount

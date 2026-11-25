@@ -168,6 +168,16 @@ def test_foreign_currency_goes_to_review():
         ),
         (
             "50000.00</cbc:PayableAmount>",
+            "1000000000000.00</cbc:PayableAmount>",  # no cabe en numeric(14, 2)
+            "xml_valor_invalido",
+        ),
+        (
+            "50000.00</cbc:PayableAmount>",
+            "-50000.00</cbc:PayableAmount>",
+            "xml_valor_invalido",
+        ),
+        (
+            "50000.00</cbc:PayableAmount>",
             "NaN</cbc:PayableAmount>",
             "xml_valor_invalido",
         ),
