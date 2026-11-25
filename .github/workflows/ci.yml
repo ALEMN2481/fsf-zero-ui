@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.12"
       - if: hashFiles('backend/requirements.txt') != ''
-        run: pip install -r backend/requirements.txt ruff==0.17.6 pytest # ruff igual que en local
+        run: pip install -r backend/requirements.txt ruff==0.17.6 pytest "hypothesis==6.*" # ruff igual que en local
       - if: hashFiles('backend/requirements.txt') != ''
         run: ruff check backend
       - if: hashFiles('backend/requirements.txt') != ''

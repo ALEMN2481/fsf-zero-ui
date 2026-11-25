@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r backend/requirements.txt pytest
+      - run: pip install -r backend/requirements.txt pytest "hypothesis==6.*"
       # Claves de desarrollo del stack local (no son secretos del proyecto en la nube).
       - name: Pruebas de integración del backend
         run: |
