@@ -24,7 +24,7 @@ insert into public.pockets (id, user_id, name) values
 insert into public.pocket_movements (user_id, pocket_id, amount) values
   ('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000b5', 20000.00);
 
-select is((select count(*)::int from public.profiles), 2, 'el trigger crea un profile por usuario');
+select is((select count(*)::int from public.profiles where id in ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b')), 2, 'el trigger crea un profile por usuario');
 
 -- ---------------------------------------------------------------- como usuario A
 set local role authenticated;
