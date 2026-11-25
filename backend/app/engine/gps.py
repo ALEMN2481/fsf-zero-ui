@@ -34,6 +34,7 @@ class Budget:
     start: date
     end: date  # incluido
     amount: Decimal
+    renewed: bool = False  # mes en curso con el monto del último presupuesto (Paso 12)
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,34 @@ def split(total: Decimal, days: int) -> list[Decimal]:
         return [ZERO] * days
     base = (total.to_integral_value(ROUND_FLOOR) // days).quantize(CENT)
     return [base] * (days - 1) + [(total - base * (days - 1)).quantize(CENT)]
+
+
+def month_bounds(day: date) -> tuple[date, date]:
+    start = day.replace(day=1)
+    following = (start + timedelta(days=32)).replace(day=1)
+    return start, following - timedelta(days=1)
+
+
+def renew(last: Budget, today: date) -> Budget:
+    """Presupuesto del mes en curso con el monto del último: se renueva solo, sin escribirlo.
+
+    Empieza tras el último periodo si este terminó dentro del mes en curso, para no solaparlos.
+    """
+    start, end = month_bounds(today)
+    return Budget(
+        max(start, last.end + timedelta(days=1)), end, last.amount, renewed=True
+    )
+
+
+def reference(movements: list[Movement]) -> dict:
+    """Referencia para proponer el presupuesto: el gasto (como en Gasto) y los ingresos
+    confirmados de un periodo. Se propone el gasto, nunca el 100 % de los ingresos."""
+    return {
+        "gasto": _net(movements),
+        "ingresos": sum(
+            (m.amount for m in movements if m.kind == EARNING and not m.in_review), ZERO
+        ),
+    }
 
 
 def _net(movements) -> Decimal:
@@ -125,6 +154,7 @@ def summary(
             "inicio": budget.start,
             "fin": budget.end,
             "presupuesto": budget.amount,
+            "renovado": budget.renewed,
         },
         "dias_restantes": days,
         "saldo_libre": free,

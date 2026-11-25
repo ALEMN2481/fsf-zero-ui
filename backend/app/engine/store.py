@@ -9,29 +9,24 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from urllib.parse import quote
 
-from app.engine.gps import Budget, Movement, classify
+from app.engine.gps import Budget, Movement, classify, month_bounds, renew
 from app.extract.bancolombia import COLOMBIA
+
+Rest = Callable[[str], list[dict]]
 
 
 def _day(timestamp: str) -> date:
     return datetime.fromisoformat(timestamp).astimezone(COLOMBIA).date()
 
 
-def _bounds(budget: Budget) -> str:
-    """Filtro occurred_at dentro del periodo, con los días en hora de Colombia."""
-    start = datetime.combine(budget.start, time(), COLOMBIA).isoformat()
-    end = datetime.combine(budget.end + timedelta(days=1), time(), COLOMBIA).isoformat()
+def _bounds(first: date, last: date) -> str:
+    """Filtro occurred_at entre dos días (incluidos), en hora de Colombia."""
+    start = datetime.combine(first, time(), COLOMBIA).isoformat()
+    end = datetime.combine(last + timedelta(days=1), time(), COLOMBIA).isoformat()
     return f"and=(occurred_at.gte.{quote(start)},occurred_at.lt.{quote(end)})"
 
 
-def budget_for(rest: Callable[[str], list[dict]], today: date) -> Budget | None:
-    rows = rest(
-        f"budgets?period_start=lte.{today}&period_end=gte.{today}"
-        "&select=period_start,period_end,amount::text"
-    )
-    if not rows:
-        return None
-    r = rows[0]  # sin solapes: lo garantiza la restricción de la tabla
+def _budget(r: dict) -> Budget:
     return Budget(
         date.fromisoformat(r["period_start"]),
         date.fromisoformat(r["period_end"]),
@@ -39,37 +34,66 @@ def budget_for(rest: Callable[[str], list[dict]], today: date) -> Budget | None:
     )
 
 
-def load(
-    rest: Callable[[str], list[dict]], today: date
-) -> tuple[Budget | None, list[Movement], list[tuple[date, Decimal]]]:
-    budget = budget_for(rest, today)
-    if budget is None:
-        return None, [], []
-    own = {a["last4"] for a in rest("accounts?select=last4") if a["last4"]}
-    movements = [
+def budget_for(rest: Rest, today: date) -> Budget | None:
+    fields = "&select=period_start,period_end,amount::text"
+    rows = rest(f"budgets?period_start=lte.{today}&period_end=gte.{today}{fields}")
+    if rows:
+        return _budget(rows[0])  # sin solapes: lo garantiza la restricción de la tabla
+    # Sin periodo que contenga hoy: se renueva el último (anterior a hoy) para el mes en curso.
+    rows = rest(f"budgets?period_end=lt.{today}&order=period_end.desc&limit=1{fields}")
+    return renew(_budget(rows[0]), today) if rows else None
+
+
+def own_accounts(rest: Rest) -> set[str]:
+    return {a["last4"] for a in rest("accounts?select=last4") if a["last4"]}
+
+
+def kind(t: dict, own: set[str]) -> str:
+    return classify(
+        t["direction"],
+        t["status"],
+        (t["category"] or {}).get("name"),
+        t["counts_in_budget"],
+        t["to_last4"],
+        own,
+    )
+
+
+def movements(rest: Rest, first: date, last: date) -> list[Movement]:
+    """Movimientos entre dos días, sin los descartados ('No es un gasto mío')."""
+    own = own_accounts(rest)
+    return [
         Movement(
             day=_day(t["occurred_at"]),
             amount=Decimal(t["amount"]),
-            kind=classify(
-                t["direction"],
-                t["status"],
-                (t["category"] or {}).get("name"),
-                t["counts_in_budget"],
-                t["to_last4"],
-                own,
-            ),
+            kind=kind(t, own),
             category=(t["category"] or {}).get("name") or "Sin categoría",
             in_review=t["status"] == "pending_review",
         )
         for t in rest(
-            f"transactions?{_bounds(budget)}&select=amount::text,direction,status,"
-            "occurred_at,counts_in_budget,to_last4,category:categories(name)"
+            f"transactions?{_bounds(first, last)}&status=neq.dismissed"
+            "&select=amount::text,direction,status,occurred_at,counts_in_budget,"
+            "to_last4,category:categories(name)"
         )
     ]
+
+
+def previous_month(rest: Rest, today: date) -> list[Movement]:
+    first, _ = month_bounds(today)
+    return movements(rest, *month_bounds(first - timedelta(days=1)))
+
+
+def load(
+    rest: Rest, today: date
+) -> tuple[Budget | None, list[Movement], list[tuple[date, Decimal]]]:
+    budget = budget_for(rest, today)
+    if budget is None:
+        return None, [], []
     pockets = [
         (_day(p["occurred_at"]), Decimal(p["amount"]))
         for p in rest(
-            f"pocket_movements?{_bounds(budget)}&select=amount::text,occurred_at"
+            f"pocket_movements?{_bounds(budget.start, budget.end)}"
+            "&select=amount::text,occurred_at"
         )
     ]
-    return budget, movements, pockets
+    return budget, movements(rest, budget.start, budget.end), pockets

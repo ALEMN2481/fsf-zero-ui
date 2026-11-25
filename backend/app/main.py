@@ -10,7 +10,7 @@ from typing import Annotated
 from uuid import UUID
 
 import httpx
-from fastapi import Body, FastAPI, Header, HTTPException, Response
+from fastapi import Body, FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -161,7 +161,7 @@ def _jsonable(value):
 
 
 def _summary(user: CurrentUser) -> dict:
-    today = datetime.now(COLOMBIA).date()  # los días se cuentan en hora de Colombia
+    today = _today()
     budget, movements, pocket_moves = engine_store.load(
         lambda path: _rest(user, path), today
     )
@@ -175,33 +175,130 @@ def gps_state(user: User) -> dict:
 
 
 class BudgetIn(BaseModel):
-    period_start: date
-    period_end: date
     amount: Annotated[Money, Field(ge=0)]
+    # Sin fechas (lo normal en la app): el mes en curso. Con fechas: un periodo a medida.
+    period_start: date | None = None
+    period_end: date | None = None
+
+
+def _today() -> date:
+    return datetime.now(COLOMBIA).date()  # los días se cuentan en hora de Colombia
 
 
 @app.post("/budgets", status_code=201)
-def create_budget(body: BudgetIn, user: User) -> dict:
-    if body.period_end < body.period_start:
-        raise HTTPException(422, "El periodo termina antes de empezar")
+def save_budget(body: BudgetIn, user: User, response: Response) -> dict:
+    """Crea el presupuesto (o cambia el monto del mes en curso). Se renueva solo cada mes."""
+    fields = "select=id,period_start,period_end,amount::text"
+    if (body.period_start is None) != (body.period_end is None):
+        raise HTTPException(422, "Faltan las fechas del periodo")
+    if body.period_start is None:
+        today = _today()
+        current = _rest(
+            user, f"budgets?period_start=lte.{today}&period_end=gte.{today}&select=id"
+        )
+        if current:
+            response.status_code = 200
+            return _rest(
+                user,
+                f"budgets?id=eq.{current[0]['id']}&{fields}",
+                "PATCH",
+                {"amount": str(body.amount)},
+                prefer="return=representation",
+            )[0]
+        renewed = engine_store.budget_for(lambda path: _rest(user, path), today)
+        start, end = gps.month_bounds(today)
+        if renewed is not None:  # empieza donde lo haría la renovación (sin solapar)
+            start = renewed.start
+    else:
+        start, end = body.period_start, body.period_end
+        if end < start:
+            raise HTTPException(422, "El periodo termina antes de empezar")
     r = _call(
         user,
-        "budgets?select=id,period_start,period_end,amount::text",
+        f"budgets?{fields}",
         "POST",
         {
-            "period_start": body.period_start.isoformat(),
-            "period_end": body.period_end.isoformat(),
+            "period_start": start.isoformat(),
+            "period_end": end.isoformat(),
             "amount": str(body.amount),
         },
         prefer="return=representation",
     )
-    if (
-        r.status_code >= 300 and r.json().get("code") == "23P01"
-    ):  # restricción de exclusión
+    if r.status_code >= 300 and r.json().get("code") == "23P01":  # exclusión
         raise HTTPException(409, "El periodo se solapa con otro presupuesto")
     if r.status_code >= 300:
         raise HTTPException(502, "Error consultando Supabase")
     return r.json()[0]
+
+
+@app.get("/budgets/suggestion")
+def budget_suggestion(user: User) -> dict:
+    """Referencia del mes anterior. Se propone lo que se gastó, no el 100 % de los ingresos."""
+    ref = gps.reference(
+        engine_store.previous_month(lambda path: _rest(user, path), _today())
+    )
+    return _jsonable(
+        {
+            "gasto_mes_anterior": ref["gasto"],
+            "ingresos_mes_anterior": ref["ingresos"],
+            "sugerido": ref["gasto"] if ref["gasto"] > 0 else None,
+        }
+    )
+
+
+@app.get("/movements")
+def recent_movements(
+    user: User, limit: Annotated[int, Query(ge=1, le=100)] = 20
+) -> list:
+    """Últimos movimientos (sin los descartados) con su tipo para el motor; sin cálculos."""
+    rest = lambda path: _rest(user, path)
+    own = engine_store.own_accounts(rest)
+    rows = rest(
+        f"transactions?status=neq.dismissed&order=occurred_at.desc&limit={limit}"
+        "&select=id,amount::text,direction,status,merchant,occurred_at,counts_in_budget,"
+        "to_last4,category:categories(id,name)"
+    )
+    return [
+        {
+            "id": r["id"],
+            "monto": r["amount"],
+            "direccion": r["direction"],
+            "estado": r["status"],
+            "comercio": r["merchant"],
+            "fecha": r["occurred_at"],
+            "categoria": (r["category"] or {}).get("name"),
+            "categoria_id": (r["category"] or {}).get("id"),
+            "tipo": engine_store.kind(r, own),
+        }
+        for r in rows
+    ]
+
+
+def _review(user: CurrentUser, tx_id: UUID, status: str) -> dict:
+    """Solo un movimiento 'por confirmar' se confirma o se descarta."""
+    done = _rest(
+        user,
+        f"transactions?id=eq.{tx_id}&status=eq.pending_review&select=id",
+        "PATCH",
+        {"status": status},
+        prefer="return=representation",
+    )
+    if not done:
+        if not _rest(user, f"transactions?id=eq.{tx_id}&select=id"):
+            raise HTTPException(404, "Movimiento no encontrado")
+        raise HTTPException(409, "El movimiento no está por confirmar")
+    return {"id": str(tx_id), "estado": status}
+
+
+@app.post("/transactions/{tx_id}/confirm")
+def confirm_movement(tx_id: UUID, user: User) -> dict:
+    return _review(user, tx_id, "confirmed")
+
+
+@app.post("/transactions/{tx_id}/dismiss")
+def dismiss_movement(tx_id: UUID, user: User) -> dict:
+    """«No es un gasto mío»: queda descartado (no se borra) y el motor no lo cuenta."""
+    return _review(user, tx_id, "dismissed")
 
 
 def _pocket_balances(user: CurrentUser) -> dict[str, Decimal]:

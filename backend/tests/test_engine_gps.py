@@ -17,6 +17,9 @@ from app.engine.gps import (
     Budget,
     Movement,
     classify,
+    month_bounds,
+    reference,
+    renew,
     split,
     summary,
 )
@@ -267,3 +270,34 @@ def test_summary_properties(amount, movements, today, extra):
         assert more[key] <= s[key] <= back[key]
     if days > 1:
         assert more["diario_desde_manana"] <= s["diario_desde_manana"]
+
+
+# ---------------------------------------------------------------- renovación y referencia (Paso 12)
+def test_month_bounds():
+    assert month_bounds(date(2026, 11, 25)) == (date(2026, 11, 1), date(2026, 11, 30))
+    assert month_bounds(date(2028, 2, 10)) == (date(2028, 2, 1), date(2028, 2, 29))
+    assert month_bounds(date(2026, 12, 31)) == (date(2026, 12, 1), date(2026, 12, 31))
+
+
+def test_renew_takes_the_current_month_with_the_last_amount():
+    october = Budget(date(2026, 10, 1), date(2026, 10, 31), D("900000.00"))
+    assert renew(october, WED) == Budget(
+        NOV.start, NOV.end, D("900000.00"), renewed=True
+    )
+    # Un periodo a medida que terminó dentro del mes: la renovación empieza al día siguiente.
+    custom = Budget(date(2026, 10, 15), date(2026, 11, 10), D("5.00"))
+    assert renew(custom, WED).start == date(2026, 11, 11)
+    assert state(budget=renew(october, WED))["periodo"]["renovado"] is True
+
+
+def test_reference_proposes_spending_not_income():
+    ref = reference(
+        [
+            spend(date(2026, 10, 3), "800000.00"),
+            spend(date(2026, 10, 4), "50000.00", kind=REFUND),
+            spend(date(2026, 10, 1), "3000000.00", "Ingresos", EARNING),
+            spend(date(2026, 10, 2), "100000.00", "Ingresos", EARNING, in_review=True),
+            spend(date(2026, 10, 5), "32000.00", kind=CASH_INVOICE),
+        ]
+    )
+    assert ref == {"gasto": D("750000.00"), "ingresos": D("3000000.00")}

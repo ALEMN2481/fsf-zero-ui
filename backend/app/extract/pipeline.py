@@ -200,6 +200,7 @@ def _process_invoice(user_id: str, email_id: str, msg: EmailMessage) -> str:
         amount=f"eq.{inv.total}",
         invoice_cufe="is.null",
         source_ref="like.bank:*",
+        status="neq.dismissed",  # «No es un gasto mío»: no absorbe facturas
     )
     action, tx = invoice_action(inv, bank_txs)
     if action == "complete":
