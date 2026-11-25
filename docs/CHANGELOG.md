@@ -10,6 +10,29 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 11 — Motor financiero GPS
+- RQ: RQF 04, RQF 05, RQN 03, RQN 01. Decisión **D12**; fórmulas en `CONTEXT.md` §Motor financiero GPS.
+- Cambios:
+  - Migración `20261125040000_engine.sql` (`529077d`): `transactions.counts_in_budget` (false en las facturas en efectivo; la migración marca también las existentes) y `transactions.to_last4` (cuenta de destino de una transferencia). Trigger `check_pocket_balance` (`security definer`): un bolsillo nunca queda en negativo; bloquea la fila del bolsillo para serializar movimientos simultáneos. pgTAP `engine_test.sql` (7).
+  - `backend/app/engine/gps.py` (`cb6fef3`): `classify`, `split` (reparto en pesos enteros, sobrante al último día) y `summary` (saldo libre, cuota y disponible de hoy, exceso, diario según el plan y desde mañana, disponible de la semana, en revisión, ingresos informativos, máximo apartable, detalle por categoría). `engine/store.py`: lectura con el JWT del usuario y `amount::text`.
+  - Extracción: la plantilla `transferencia_enviada` guarda `to_last4`; las facturas en efectivo se guardan con `counts_in_budget = false`.
+  - API: `GET /gps`; `POST /budgets` (409 si se solapa, 422 si el periodo o el monto no valen); `GET /pockets`, `POST /pockets`; `POST /pockets/{id}/movements` (+ apartar, − retirar): sin presupuesto → 409 `sin_presupuesto`; más que el saldo libre → 409 `{"motivo": "sobregiro", "maximo": …}` (CU-05 A1); más que lo apartado → 409 `{"motivo": "saldo_insuficiente", "maximo": …}`.
+  - CI (`806843b`): instala `hypothesis`.
+- Fórmulas (resumen; detalle en `CONTEXT.md`): `L₀ = P − Gasto(ini..ayer) − Ap`; `L = L₀ − Gh`; `n = fin − hoy + 1`; `cuota_hoy = reparto(L₀, n)[0]`; `disponible_hoy = cuota_hoy − Gh`; `diario_desde_mañana = reparto(L, n−1)[0]`; `disponible_semana = Σ reparto(L₀, n)[0:k] − Gh`. `Gasto` = gastos (confirmados y en revisión) − devoluciones confirmadas, sin facturas en efectivo ni transferencias entre cuentas propias.
+- Verificación:
+  - `test_engine_gps.py` (27): una prueba por fórmula (saldo, diario, semana, recálculo con exceso, devoluciones, efectivo, en revisión, entre cuentas, bolsillos, `classify`); casos borde (sin presupuesto y hoy fuera del periodo, último día, semana cortada por el fin del periodo, febrero, periodo sobregirado → cuotas 0 y disponible negativo, presupuesto 0, movimientos fuera del periodo, fecha futura); propiedades con hypothesis (Σ reparto = total exacto, cuota de hoy ≤ parte justa, semana ≤ L₀, semana ≥ hoy, Σ por categoría = gasto, monotonía ante un gasto o una devolución más, Decimal con 2 decimales). Mutación verificada: con el sobrante en el primer día fallan 5 tests.
+  - `test_engine_api.py` (4, Supabase local): **retiro de $200.000 + factura en efectivo de $32.000 → `gasto_periodo` = 200000.00** (la factura queda en `efectivo_factura` de Alimentos); transferencia a `*9999` cuenta como gasto hasta registrar esa cuenta y luego no; presupuestos por usuario (B no ve el de A), solape 409, validaciones 422, sin token 401; bolsillo: sin presupuesto 409, sobregiro 409 con `maximo` 800000.00, apartar el máximo deja el saldo libre en 0.00, retirar de más 409 con `maximo`, B no usa el bolsillo de A (404).
+  - Bug encontrado y corregido: con el trigger como `security invoker`, Auth (`supabase_auth_admin`) no podía borrar un usuario con movimientos de bolsillo (`permission denied for table pockets`). Ahora es `security definer`, con test pgTAP, y el fixture `users` falla si no puede borrar (mutación verificada: con `invoker` el fixture lo detecta). Los usuarios de prueba que dejó en el Supabase local se borraron con autorización del supervisor.
+  - `npx supabase test db` → PASS (66); backend con Supabase local → `282 passed`; sin Supabase → `257 passed, 25 skipped`; ruff OK.
+- Pendientes/riesgos (también en el ROADMAP):
+  - Paso 12: renovación automática del presupuesto por periodo y cifra propuesta según los ingresos del periodo anterior.
+  - Pasos 12 y 14: aviso en tiempo real a la app ante un gasto (CU-04).
+  - Entre cuentas propias solo en `transferencia_enviada`, y con 4 dígitos que pueden coincidir con una cuenta ajena.
+  - Una factura en efectivo nunca suma al gasto, aunque el efectivo no viniera de un retiro registrado.
+  - Apartar se comprueba sin bloqueo (dos apartados simultáneos podrían dejar el saldo libre en negativo).
+  - La nube sigue sin las migraciones de los Pasos 8–11 (sincronizar antes del Paso 12, con confirmación).
+- Siguiente: Paso 12 (pantalla «Disponible diario»), tras la aprobación del supervisor.
+
 ## 2026-11-25 · Paso 10 (ajustes) — Recategorización al completar con factura
 - RQ: RQF 03
 - Cambios:
