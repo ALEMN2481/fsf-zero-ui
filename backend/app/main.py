@@ -35,6 +35,9 @@ logging.getLogger("uvicorn.access").addFilter(_HideQueryString())
 # httpx registra en INFO la URL de cada petición saliente, y sus filtros pueden llevar datos (p. ej. la
 # dirección de Gmail al buscar la conexión). Solo avisos y errores.
 logging.getLogger("httpx").setLevel(logging.WARNING)
+# httpcore en DEBUG registra las cabeceras de respuesta, que repiten la URL con los filtros (p. ej. el
+# monto al buscar el movimiento del banco que completa una factura).
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _rest(user: CurrentUser, path: str) -> list[dict]:

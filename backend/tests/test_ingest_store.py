@@ -55,10 +55,13 @@ def test_stores_encrypted_once_and_logs_no_secrets(env, caplog):
     rows = service_rows(a["id"])
     assert len(rows) == 1
     row = rows[0]
-    assert (row["rule"], row["status"], row["key_version"]) == (
-        "bancolombia",
-        "pending_extraction",
-        1,
+    assert (
+        (row["rule"], row["status"], row["key_version"])
+        == (
+            "bancolombia",
+            "pending_review",  # 09B: esta muestra del 08A no sigue ninguna plantilla → revisión
+            1,
+        )
     )
     blob = bytes.fromhex(row["raw_encrypted"].removeprefix("\\x"))
     assert BODY_MARKER.encode() not in blob  # en la BD solo hay texto cifrado
@@ -99,7 +102,10 @@ def test_user_reads_only_own_metadata(env):
     mine = get(a["token"], "id,rule,status,sender_domain")
     assert mine.status_code == 200
     assert [(x["rule"], x["status"]) for x in mine.json()] == [
-        (mail.INVOICE_RULE, "pending_extraction")
+        (
+            mail.INVOICE_RULE,
+            "pending_review",
+        )  # 09B: sin Gmail conectado ni AttachedDocument
     ]
     assert get(a["token"], "raw_encrypted").status_code in (
         401,

@@ -6,6 +6,7 @@ Los logs solo llevan metadatos: nunca asunto, cuerpo, direcciones completas ni c
 import logging
 
 from app import service_db
+from app.extract import pipeline
 from app.ingest import crypto, mail
 
 log = logging.getLogger("fsf.ingest")
@@ -71,4 +72,9 @@ def ingest(
         decision.rule,
         decision.sender_domain,
     )
+    try:
+        pipeline.process(user_id, rows[0]["id"], decision.rule, msg)
+    except Exception as e:  # noqa: BLE001 - el correo ya está guardado; un fallo no debe perderlo
+        # Queda en pending_extraction. Solo el tipo: el mensaje podría llevar datos del correo.
+        log.error("falló la extracción id=%s error=%s", rows[0]["id"], type(e).__name__)
     return "stored"
