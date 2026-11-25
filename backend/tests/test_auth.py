@@ -80,8 +80,14 @@ def test_missing_token(client):
         pytest.param(lambda: make_token(key=OTHER_KEY), id="firma-invalida"),
         pytest.param(lambda: make_token(exp=int(time.time()) - 10), id="caducado"),
         pytest.param(lambda: make_token(aud="anon"), id="audiencia-incorrecta"),
-        pytest.param(lambda: make_token(iss="https://otro.supabase.co/auth/v1"), id="emisor-incorrecto"),
-        pytest.param(lambda: make_token(key="secreto-compartido-de-32-bytes!!", alg="HS256"), id="alg-HS256"),
+        pytest.param(
+            lambda: make_token(iss="https://otro.supabase.co/auth/v1"),
+            id="emisor-incorrecto",
+        ),
+        pytest.param(
+            lambda: make_token(key="secreto-compartido-de-32-bytes!!", alg="HS256"),
+            id="alg-HS256",
+        ),
         pytest.param(lambda: make_token(key=None, alg="none"), id="alg-none"),
         pytest.param(lambda: "no-es-un-jwt", id="malformado"),
     ],

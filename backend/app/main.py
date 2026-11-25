@@ -11,7 +11,10 @@ def _rest(user: CurrentUser, path: str) -> list[dict]:
     """GET a la API REST de Supabase con el JWT del usuario: RLS decide qué filas ve (D4)."""
     r = httpx.get(
         f"{settings.supabase_url}/rest/v1/{path}",
-        headers={"apikey": settings.supabase_anon_key, "Authorization": f"Bearer {user.token}"},
+        headers={
+            "apikey": settings.supabase_anon_key,
+            "Authorization": f"Bearer {user.token}",
+        },
         timeout=5,
     )
     if r.status_code != 200:

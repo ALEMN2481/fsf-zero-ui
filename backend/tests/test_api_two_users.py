@@ -26,12 +26,16 @@ LOCAL_READY = bool(ANON and SERVICE and ("127.0.0.1" in URL or "localhost" in UR
 if os.getenv("REQUIRE_SUPABASE") and not LOCAL_READY:
     raise RuntimeError("REQUIRE_SUPABASE=1 pero no hay Supabase local configurado")
 
-pytestmark = pytest.mark.skipif(not LOCAL_READY, reason="requiere Supabase local (supabase start)")
+pytestmark = pytest.mark.skipif(
+    not LOCAL_READY, reason="requiere Supabase local (supabase start)"
+)
 
 
 def admin(method, path, **kw):
     h = {"apikey": SERVICE, "Authorization": f"Bearer {SERVICE}"}
-    return httpx.request(method, f"{URL}/auth/v1/admin/{path}", headers=h, timeout=10, **kw)
+    return httpx.request(
+        method, f"{URL}/auth/v1/admin/{path}", headers=h, timeout=10, **kw
+    )
 
 
 def sign_in(email, password=PASSWORD):
@@ -45,7 +49,10 @@ def sign_in(email, password=PASSWORD):
 
 def sign_up(email, password):
     return httpx.post(
-        f"{URL}/auth/v1/signup", headers={"apikey": ANON}, json={"email": email, "password": password}, timeout=10
+        f"{URL}/auth/v1/signup",
+        headers={"apikey": ANON},
+        json={"email": email, "password": password},
+        timeout=10,
     )
 
 
@@ -57,7 +64,11 @@ def users(monkeypatch):
     created = {}
     for name in ("a", "b"):
         email = f"fsf-{name}-{uuid.uuid4().hex[:8]}@test.local"
-        r = admin("POST", "users", json={"email": email, "password": PASSWORD, "email_confirm": True})
+        r = admin(
+            "POST",
+            "users",
+            json={"email": email, "password": PASSWORD, "email_confirm": True},
+        )
         assert r.status_code == 200, r.text
         token = sign_in(email).json()["access_token"]
         created[name] = {"id": r.json()["id"], "email": email, "token": token}
@@ -75,7 +86,11 @@ def test_a_does_not_read_b_through_api(users):
     # B crea una cuenta directamente en Supabase con su propio token
     r = httpx.post(
         f"{URL}/rest/v1/accounts",
-        headers={"apikey": ANON, **bearer(b["token"]), "Prefer": "return=representation"},
+        headers={
+            "apikey": ANON,
+            **bearer(b["token"]),
+            "Prefer": "return=representation",
+        },
         json={"name": "Cuenta privada de B", "kind": "debit"},
         timeout=10,
     )
@@ -97,7 +112,8 @@ def test_a_does_not_read_b_through_api(users):
 
 
 def test_password_shorter_than_8_is_rejected():
-    r = sign_up(f"fsf-weak-{uuid.uuid4().hex[:8]}@test.local", "corta12")  # 7 caracteres
+    email = f"fsf-weak-{uuid.uuid4().hex[:8]}@test.local"
+    r = sign_up(email, "corta12")  # 7 caracteres
     assert r.status_code == 422
     assert r.json().get("error_code") == "weak_password"
 

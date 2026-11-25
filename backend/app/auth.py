@@ -57,7 +57,9 @@ def _signing_key(kid: str) -> jwt.PyJWK:
         return _jwks[kid]
 
 
-def current_user(creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]) -> CurrentUser:
+def current_user(
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> CurrentUser:
     if creds is None:
         raise HTTPException(401, "Falta el token")
     token = creds.credentials

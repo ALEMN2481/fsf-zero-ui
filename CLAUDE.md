@@ -17,7 +17,7 @@ Contexto: docs/CONTEXT.md · Ruta: docs/ROADMAP.md · Bitácora: docs/CHANGELOG.
 - Commits pequeños, push solo tras verificación. Formato Conventional Commits
   (desde 2026-11-24; no reescribir commits ya subidos):
   - Título: `tipo(ámbito): descripción` en imperativo, en español, sin punto
-    final, ≤ 72 caracteres. Tipos: feat, fix, test, docs, ci, chore, refactor.
+    final, ≤ 72 caracteres. Tipos: feat, fix, test, docs, ci, chore, refactor, style.
     Ámbitos: app, backend, db, ci, docs.
   - Cuerpo: qué cambia y por qué, líneas ≤ 72 caracteres.
   - Pie: `Paso: NN`, `Refs: <RQ>` y `Co-Authored-By`.

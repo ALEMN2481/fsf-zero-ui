@@ -2,7 +2,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ENV_FILE = Path(__file__).resolve().parent.parent / ".env"  # backend/.env, arranque desde cualquier carpeta
+# backend/.env, aunque se arranque desde otra carpeta.
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -10,7 +11,8 @@ class Settings(BaseSettings):
 
     app_env: str = "dev"
     supabase_url: str = ""
-    supabase_anon_key: str = ""  # clave pública; la service_role no se usa en este backend todavía
+    # Clave pública; la service_role no se usa en este backend todavía.
+    supabase_anon_key: str = ""
 
 
 settings = Settings()
