@@ -39,4 +39,6 @@ def users(monkeypatch):
     finally:
         # También si la preparación falla a medias: un usuario huérfano rompe otros tests.
         for u in created.values():
-            admin("DELETE", f"users/{u['id']}")
+            r = admin("DELETE", f"users/{u['id']}")
+            # Un borrado que falla deja datos huérfanos y oculta errores (p. ej. de un trigger).
+            assert r.status_code == 200, f"no se pudo borrar el usuario: {r.text}"

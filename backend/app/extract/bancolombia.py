@@ -63,7 +63,7 @@ TEMPLATES = (
     _t(
         "transferencia_enviada",
         _NEW
-        + rf"Transferiste {_AMOUNT} desde {_ACCOUNT} a la cuenta \*\d{{4}} {_WHEN}",
+        + rf"Transferiste {_AMOUNT} desde {_ACCOUNT} a la cuenta \*(?P<to_last4>\d{{4}}) {_WHEN}",
         "expense",
         "transfer",
     ),
@@ -137,6 +137,7 @@ class Alert:
     occurred_at: datetime | None = None
     payment_method: str | None = None
     last4: str | None = None
+    to_last4: str | None = None  # cuenta de destino de una transferencia enviada
 
 
 def parse_alert(text: str) -> Alert:
@@ -177,4 +178,5 @@ def parse_alert(text: str) -> Alert:
         occurred_at=when.replace(tzinfo=COLOMBIA),
         payment_method=template.method or _CARD_METHOD[group("card").casefold()],
         last4=group("last4"),
+        to_last4=group("to_last4"),
     )

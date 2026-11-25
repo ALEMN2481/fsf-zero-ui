@@ -136,6 +136,7 @@ def _process_alert(
         "occurred_at": alert.occurred_at.isoformat(),
         "payment_method": alert.payment_method,
         "account_id": _account_id(user_id, alert.last4),
+        "to_last4": alert.to_last4,
         "source_ref": f"bank:{email_id}",
         "status": status,
     }
@@ -226,6 +227,8 @@ def _process_invoice(user_id: str, email_id: str, msg: EmailMessage) -> str:
                 "invoice_cufe": inv.cufe,
                 "source_ref": f"cufe:{inv.cufe}",
                 "status": "confirmed" if action == "new" else "pending_review",
+                # En efectivo: el dinero ya salió con el retiro en cajero, que es gasto (D12).
+                "counts_in_budget": inv.payment_method != "cash",
                 **categorize.assign(user_id, inv.supplier_name, "expense"),
             }
         )
