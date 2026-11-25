@@ -10,6 +10,16 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 10 (ajustes) — Recategorización al completar con factura
+- RQ: RQF 03
+- Cambios:
+  - `pipeline._process_invoice`: cuando la factura completa la alerta del banco y cambia el comercio, el movimiento se recategoriza con la razón social, salvo que `category_source` sea `usuario` (la condición va en la misma escritura; `null` = movimiento anterior al Paso 10, sí se recategoriza).
+  - `CLAUDE.md`: `supabase db reset` (local o remoto) y los borrados masivos también requieren confirmación del supervisor.
+  - `ROADMAP.md`: sincronizar la nube (migraciones y backfill) antes del Paso 12.
+- Verificación: `test_invoice_completion_recategorizes_unless_user_corrected` (2 casos: sin corrección → Alimentos por regla; con corrección → se mantiene la del usuario). Mutación verificada: sin la condición, el caso corregido falla. Backend con Supabase local → `251 passed`; sin Supabase → `230 passed, 21 skipped`; ruff OK.
+- Pendientes/riesgos: estado de las migraciones en la nube por comprobar (solo lectura, con confirmación).
+- Siguiente: Paso 11, tras aprobar el plan.
+
 ## 2026-11-25 · Paso 10 — Categorización
 - RQ: RQF 03, RQN 01, RQN 04 (el LLM no retrasa el aviso). Decisión **D11** (`CONTEXT.md`).
 - Antes del paso: `chore: normaliza finales de línea a LF` (`e3ac33a`, `.gitattributes` con `* text=auto eol=lf`) y nueva regla en `CLAUDE.md`: los comandos de git que pueden perder trabajo requieren confirmación del supervisor (`653df80`).

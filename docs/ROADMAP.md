@@ -30,6 +30,7 @@ Cada paso: **RQ** que cubre · **Construir** (acotado) · **Verificar** antes de
 - Programar `renew_watches()` a diario (los avisos de Gmail caducan a los 7 días) y probar Gmail contra la nube (suscripción push con la URL HTTPS definitiva).
 
 ## Pendientes para pasos concretos
+- **Antes del Paso 12: sincronizar la nube.** Aplicar al proyecto remoto las migraciones que le falten (todo se ha probado solo en Supabase local) y, después, el backfill de categorías (`python -m scripts.categorize_backfill --remote`). Ambas cosas requieren confirmación del supervisor.
 - Antes del Paso 16: **medir la precisión por campo con correos reales anonimizados** (alertas de Bancolombia y facturas DIAN). La del Paso 9 se midió solo con datos simulados: el conjunto del supervisor (22) y las alertas inventadas fuera de plantilla (15).
 - Antes del Paso 16: confirmar con una factura real anonimizada las rutas del XML, el código `02` de validación y la tabla de medios de pago (las 6 facturas del supervisor son simuladas y coinciden con la estructura actual; todo está en `backend/app/extract/invoice.py`), y con alertas reales los formatos de Bancolombia (las plantillas salen de alertas simuladas; lo que no encaje va a `pending_review`).
 - Antes del Paso 16: serializar la extracción por usuario (dos avisos simultáneos de una alerta y su factura podrían no encontrarse y contarse dos veces) y reprocesar los correos que quedan en `pending_extraction` si la extracción falla.
