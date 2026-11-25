@@ -52,4 +52,4 @@ jobs:
         run: flutter analyze
       - if: hashFiles('app/pubspec.yaml') != ''
         working-directory: app
-        run: flutter test
+        run: flutter test --exclude-tags golden # las capturas dependen del sistema operativo
