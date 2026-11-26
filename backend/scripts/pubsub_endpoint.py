@@ -70,7 +70,7 @@ def main(argv: list[str]) -> None:
             # Solo la última línea: el error de gcloud no lleva secretos, pero sí rutas largas.
             sys.exit(f"gcloud falló: {r.stderr.strip().splitlines()[-1:]}")
     print(
-        f"suscripción {SUBSCRIPTION} {'actualizada' if exists else 'creada'} → {argv[0]}/gmail/push"
+        f"suscripción {SUBSCRIPTION} {'actualizada' if exists else 'creada'}: {argv[0]}/gmail/push"
     )
 
 
