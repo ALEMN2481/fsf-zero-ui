@@ -10,6 +10,23 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 12B — Ajuste visual (diseño de Figma) y retoque del Paso 7
+- RQ: RQF 04, RQF 01, RQN 05, RQN 02, RQN 03. Decisión **D14** (`CONTEXT.md`).
+- Nube: `migration list --linked` (solo lectura) → **7/7 migraciones en local y en remoto**; se quitó el pendiente del ROADMAP.
+- Choques con decisiones aprobadas, resueltos por el supervisor antes de implementar: tarjeta «Reservado» en la principal (sí, cifra del backend); botón y globo del Coach (no, hasta el Paso 13); total y % de bolsillos (en el backend); FaceID y texto legal en el acceso (se quitan).
+- Cambios:
+  - Backend (`a843e2d`): `/gps` → `reservado` (total de los bolsillos); `GET /pockets` → `{total, bolsillos[].porcentaje}` con `gps.progress` (entero hacia abajo, sin tope). Tests: 6 casos de `progress` + integración.
+  - App (`a26f071`): `theme.dart` (tokens con contraste corregido), Inter (400/500/600/700) y Unbounded (500/700) en `assets/fonts/` con `OFL.txt`, logo en `assets/images/logo.png` e íconos de Android e iOS con `flutter_launcher_icons` (se corrigió a mano el ajuste que la herramienta cambia por error en `project.pbxproj`); arranque nativo oscuro; pantallas: `launch_screen.dart`, acceso con logo (2 campos, sin Apple/FaceID/texto legal), principal (etiqueta en mayúsculas, cifra Unbounded en `FittedBox`, tarjeta «Reservado», tarjetas que apilan el monto con el texto grande), hoja «Categorizar gasto» (categorías reales, dos por fila, `CategoryOption`), bolsillos (total, «Metas de ahorro», %, barra de 8), `tutorial.dart` (una sola vez, marca `tutorial_seen` en el almacenamiento seguro) y `data_sources_screen.dart` (solo Gmail; «Tus datos viajan y se guardan cifrados»). Menú: «Fuentes de datos» sustituye a «Conectar correo». `analysis_options.yaml`: ancho de formato 120 (el del código existente).
+  - Diseño: `docs/design/` con `DISENO.md` actualizado y el logo renombrado a `logo.png` (fondo transparente → blanco). README: créditos de las fuentes y de la plantilla (licencia pendiente).
+- Verificación:
+  - App: `flutter analyze` → No issues found; `flutter test --exclude-tags golden` → **65 passed** (8 nuevos en `design_test.dart`: tutorial con cifras reales, sin Obligaciones ni Coach, solo con presupuesto; Fuentes de Datos en sus 3 estados y sin reenvío, banca ni «cifrado militar»; arranque con el logo; acceso con ≤ 3 campos y sin Apple/FaceID/Términos; todos al 200 % con `androidTapTargetGuideline`, `labeledTapTargetGuideline` y `textContrastGuideline`). Los tests de «sin tablas ni gráficos» se mantienen.
+  - Golden: **12 capturas** regeneradas con Inter/Unbounded reales: las 8 del Paso 12 y `7_arranque`, `8_acceso`, `9_tutorial`, `10_fuentes_de_datos`. Los datos son los del Paso 12, adaptados al formato nuevo de `/pockets` con las reglas del backend (350.000 de 1.000.000 → 35 %).
+  - Fallos encontrados y corregidos: `setState` que devolvía un Future (Fuentes de Datos); desbordes al 200 % en el tutorial, el arranque y el acceso; comercio partido a mitad de palabra en las tarjetas al 200 %; el logo no se precargaba en la captura del arranque.
+  - Backend con Supabase local → `295 passed` (con usuarios demo en la base); sin Supabase → `266 passed, 29 skipped`; ruff OK.
+  - Emulador API 35 (backend y Supabase locales): arranque nativo con el ícono nuevo → acceso → inicio de sesión con la cuenta demo → tutorial con cifras reales → principal ($ 355.291 hoy, Reservado $ 350.000). Capturas: `docs/capturas/paso12b_emulador_{arranque,acceso,tutorial,principal}.png`.
+- Pendientes/riesgos: licencia de la plantilla de Figma (la revisa el supervisor); Términos y Privacidad antes del Paso 16; logo en alta resolución para iOS; quedan 2 usuarios demo locales (`demo-de7552`, `vacio-de7552`) por si se quieren repetir pruebas: borrarlos requiere confirmación; iOS sin probar.
+- Siguiente: Paso 13 (Coach), tras la aprobación del supervisor.
+
 ## 2026-11-25 · Paso 12 (cierre) — Capturas, emulador estable y tests independientes de la BD
 - RQ: RQF 04, RQN 05, RQN 02, RQN 03.
 - Cambios:

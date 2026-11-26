@@ -34,3 +34,8 @@ aparecen las dos herramientas; prueba `extract_bank_alert` con, por ejemplo,
 `Bancolombia: Compraste $23.500,00 en PANADERIA EJEMPLO con tu T.Deb *0000, el 23/11/2026 a las 07:45.`
 Para el respaldo con LLM hace falta Ollama en marcha con `qwen2.5:3b` (`ollama pull qwen2.5:3b`);
 la primera llamada con el modelo fuera de memoria tarda ~12–14 s.
+
+## Créditos de diseño
+- Tipografías **Inter** (The Inter Project Authors) y **Unbounded** (The Unbounded Project Authors), con licencia SIL Open Font License 1.1: `app/assets/fonts/*/OFL.txt`.
+- Estilo visual adaptado de la plantilla «Invest App App design (Community)» de la Comunidad de Figma. *Licencia pendiente de revisar por el supervisor (ver ROADMAP); si exige atribución, se añadirá aquí.*
+- Logo: `docs/design/logo.png`.
