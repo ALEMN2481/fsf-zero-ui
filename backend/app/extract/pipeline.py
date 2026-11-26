@@ -259,8 +259,8 @@ def process(
     [user_accounts]: las cuentas ya leídas (si no, se leen). [before_mark] se llama con el movimiento
     ya escrito y antes de marcar el correo: el aviso no espera a esa escritura (RQN 04).
 
-    shortcut: sin bloqueo entre avisos simultáneos del mismo usuario (una alerta y su factura a la vez
-    podrían no encontrarse y contarse dos veces); con varias instancias, serializar por usuario (Paso 16).
+    Quien llama la serializa por usuario (ingest.store.user_lock): una alerta y su factura
+    simultáneas deben verse entre sí.
     """
     if rule == INVOICE_RULE:
         status = _process_invoice(user_id, email_id, msg)

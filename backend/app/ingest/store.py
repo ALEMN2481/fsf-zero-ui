@@ -4,13 +4,26 @@ Los logs solo llevan metadatos: nunca asunto, cuerpo, direcciones completas ni c
 """
 
 import logging
-from datetime import datetime
+import threading
+from datetime import UTC, datetime, timedelta
 
 from app import push, service_db
 from app.extract import pipeline
 from app.ingest import crypto, mail
 
 log = logging.getLogger("fsf.ingest")
+
+# Una extracción a la vez por usuario: una alerta y su factura que llegan juntas deben verse entre
+# sí (si no, se cuentan dos veces).
+# shortcut: candados en memoria, válidos con un solo proceso (la expo, D17); con varias instancias,
+# un bloqueo en la BD (pg_advisory_xact_lock por usuario).
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+
+
+def user_lock(user_id: str) -> threading.Lock:
+    with _locks_guard:
+        return _locks.setdefault(user_id, threading.Lock())
 
 
 def _aad(user_id: str, digest: str) -> bytes:
@@ -90,20 +103,89 @@ def ingest(
         except Exception as e:  # noqa: BLE001 - un aviso que falla no debe perder el correo
             log.error("falló el aviso id=%s error=%s", rows[0]["id"], type(e).__name__)
 
-    try:
-        user_accounts = pipeline.accounts(user_id)  # una sola lectura por correo
-        pipeline.process(
-            user_id,
-            rows[0]["id"],
-            decision.rule,
-            msg,
-            datetime.fromisoformat(rows[0]["received_at"]),
-            user_accounts,
-            before_mark=notify,
-        )
-    except Exception as e:  # noqa: BLE001 - el correo ya está guardado; un fallo no debe perderlo
-        # Queda en pending_extraction. Solo el tipo: el mensaje podría llevar datos del correo.
-        log.error("falló la extracción id=%s error=%s", rows[0]["id"], type(e).__name__)
-    if not notified:
-        notify()  # la extracción falló antes: igual se avisa lo que haya quedado sin avisar
+    with user_lock(user_id):
+        try:
+            user_accounts = pipeline.accounts(user_id)  # una sola lectura por correo
+            pipeline.process(
+                user_id,
+                rows[0]["id"],
+                decision.rule,
+                msg,
+                datetime.fromisoformat(rows[0]["received_at"]),
+                user_accounts,
+                before_mark=notify,
+            )
+        except Exception as e:  # noqa: BLE001 - el correo ya está guardado; un fallo no debe perderlo
+            # Queda en pending_extraction (se reprocesa). Solo el tipo: el mensaje podría llevar datos.
+            log.error(
+                "falló la extracción id=%s error=%s", rows[0]["id"], type(e).__name__
+            )
+        if not notified:
+            notify()  # la extracción falló antes: igual se avisa lo que haya quedado sin avisar
     return "stored"
+
+
+def reprocess_pending(min_age_s: int = 60, user_ids: list[str] | None = None) -> int:
+    """Vuelve a extraer los correos que quedaron en pending_extraction (p. ej. por un fallo o un
+    reinicio). Devuelve cuántos extrajo. [min_age_s]: no toca los que se están procesando ahora.
+
+    Idempotente: si el movimiento de una alerta ya existe (se insertó y falló al marcar el correo),
+    solo se marca el correo. Las facturas ya se protegen por su CUFE.
+    """
+    limit = (datetime.now(UTC) - timedelta(seconds=min_age_s)).isoformat()
+    params = {
+        "status": "eq.pending_extraction",
+        "received_at": f"lt.{limit}",
+        "select": "id,user_id,rule,message_hash,key_version,raw_encrypted,received_at",
+        "order": "received_at",
+    }
+    if user_ids is not None:
+        params["user_id"] = f"in.({','.join(user_ids)})"
+    done, touched = 0, set()
+    for row in service_db.rest("GET", "inbound_emails", params=params).json():
+        user_id, email_id = row["user_id"], row["id"]
+        try:
+            with user_lock(user_id):
+                existing = service_db.rest(
+                    "GET",
+                    "transactions",
+                    params={
+                        "user_id": f"eq.{user_id}",
+                        "source_ref": f"eq.bank:{email_id}",
+                        "select": "id",
+                    },
+                ).json()
+                if existing:
+                    service_db.rest(
+                        "PATCH",
+                        "inbound_emails",
+                        params={"id": f"eq.{email_id}"},
+                        json={
+                            "status": "extracted",
+                            "extracted_at": datetime.now(UTC).isoformat(),
+                        },
+                    )
+                else:
+                    raw = crypto.decrypt(
+                        row["key_version"],
+                        service_db.from_bytea(row["raw_encrypted"]),
+                        _aad(user_id, row["message_hash"]),
+                    )
+                    pipeline.process(
+                        user_id,
+                        email_id,
+                        row["rule"],
+                        mail.parse(raw),
+                        datetime.fromisoformat(row["received_at"]),
+                    )
+            done += 1
+            touched.add(user_id)
+        except Exception as e:  # noqa: BLE001 - uno que falla no frena a los demás
+            log.error("falló el reproceso id=%s error=%s", email_id, type(e).__name__)
+    for user_id in touched:
+        try:
+            push.new_movements(user_id)
+        except Exception as e:  # noqa: BLE001
+            log.error("falló el aviso del reproceso error=%s", type(e).__name__)
+    log.info("reproceso de correos pendientes extraidos=%d", done)
+    return done

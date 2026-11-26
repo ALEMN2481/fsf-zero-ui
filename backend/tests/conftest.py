@@ -13,6 +13,8 @@ def no_local_llm(monkeypatch):
     monkeypatch.setattr(settings, "ollama_url", "")
     # Ni avisos push reales: los tests de avisos pasan su propio envío simulado.
     monkeypatch.setattr(settings, "fcm_credentials_file", "")
+    # Ni reproceso al arrancar la app: recorrería los correos de la demo en la base local.
+    monkeypatch.setattr(settings, "reprocess_on_start", False)
     # Sin hilos de fondo que sigan vivos tras el test: quien lo necesita llama a run_pending.
     monkeypatch.setattr(categorize, "schedule", lambda user_id: None)
 

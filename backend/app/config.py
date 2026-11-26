@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # Avisos push con FCM (Paso 14, D16): ruta de la clave JSON de la cuenta de servicio, fuera del
     # repo. El proyecto sale de su campo project_id. Sin ella no se envían avisos.
     fcm_credentials_file: str = ""
+    # Al arrancar, reprocesar los correos que quedaron en pending_extraction (Paso 15). Los tests lo
+    # apagan: comparten la base local con la demo.
+    reprocess_on_start: bool = True
 
 
 settings = Settings()
