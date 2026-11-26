@@ -139,8 +139,9 @@ def run_pending(user_id: str, ask: bool = False) -> int:
             # Siguen en Otros como 'pendiente': se reintentan en la próxima ejecución.
             log.warning("llm de categorías no disponible error=%s", type(e).__name__)
             break
+        # Elegir «Otros» tampoco es saberla: queda en Otros por descarte.
         if name == OTHER:
-            name = None  # elegir «Otros» tampoco es saberla: queda en Otros por descarte
+            name = None
         # Condición en la misma escritura: si el usuario corrigió mientras el LLM pensaba, no se toca.
         r = service_db.rest(
             "PATCH",

@@ -220,7 +220,8 @@ def test_llm_never_overwrites_a_user_correction(env, users, monkeypatch):
     "answer, expected",
     [
         (None, ("Otros", "otros")),  # respuesta inválida: Otros definitivo
-        ("Otros", ("Otros", "llm")),  # el LLM no está seguro
+        # El LLM no está seguro: también Otros por descarte, para preguntarle al usuario (Paso 14).
+        ("Otros", ("Otros", "otros")),
     ],
 )
 def test_llm_unsure_or_invalid_goes_to_otros(env, monkeypatch, answer, expected):
@@ -268,7 +269,7 @@ def test_backfill_categorizes_old_movements(env, monkeypatch):
     assert counts["por_llm"] >= 1
     m = by_merchant(user_id)
     assert m["FARMACIA FICTICIA"] == ("Salud", "regla")
-    assert m["ZAPATERIA INVENTADA"] == ("Otros", "llm")
+    assert m["ZAPATERIA INVENTADA"] == ("Otros", "otros")
     assert m[None] == ("Ingresos", "direccion")
     assert (
         svc("GET", "transactions", params={"category_id": "is.null", "select": "id"})
