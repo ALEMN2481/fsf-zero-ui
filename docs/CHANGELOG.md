@@ -10,6 +10,27 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-26 · Paso 15 — Seguridad y latencia para la expo (en curso: falta la medición)
+- RQ: RQN 01, RQN 04, RQF 04. Decisiones D15 (ajuste del Coach) y D17.
+- Seguridad:
+  - pgTAP de todo el esquema `public` (`security_test.sql`): RLS en las 12 tablas, sin políticas para `anon`, sin vistas, `security definer` con `search_path` vacío y no invocables por el usuario. pgTAP: 91.
+  - Logs sin datos personales: los errores de Supabase ya no llevan la URL (sus filtros podían tener un correo o un comercio); logger `httpx2` en WARNING; test del flujo completo.
+  - Dependencias: `pip-audit` (7 vulnerabilidades de `starlette` 0.46 → FastAPI 0.165, sin ninguna) y OSV sobre `pubspec.lock` (0 en 119 paquetes), ambos en la CI. Servidor MCP verificado con FastAPI 0.165 (7 tests).
+  - Límite del Coach: 60 preguntas cada 10 min por usuario (429 y aviso en la app).
+  - Extracción en serie por usuario (alerta y factura simultáneas → un movimiento) y reproceso de `pending_extraction` al arrancar, sin duplicar.
+- Latencia (RQN 04):
+  - Tramos registrados: el backend anota cuándo publicó Pub/Sub y cuándo llegó el aviso; el teléfono, el correo de cada aviso. `scripts.latency_report` arma la tabla con p50/p95.
+  - Latido de FCM para el emulador (`expo/latido-fcm.ps1`): sin él la conexión con FCM se moría sin tráfico (avisos de hasta 197 s); con él siguió viva 16 min y el aviso llegó en 0,7 s.
+  - Realtime sin FCM: con la app abierta el gasto apareció en 2,6 s.
+  - `scripts.pubsub_endpoint` crea o cambia la suscripción hacia el túnel (gcloud); la audiencia se pasa al backend por variable de entorno.
+  - Una medición real (FE-PRUEBA-0011): Gmail→Pub/Sub 10,12 s · Pub/Sub→backend 0,94 · backend 1,28 + 0,67 · FCM→teléfono 0,08 · total 13,10 s.
+- Coach más natural (D15): reintento con el motivo, sin « » para el usuario, reglas afinadas y 2–3 redacciones por plantilla. 35 preguntas: descartes 3 → 0, cifras 100 %, p50 1,25 s (`docs/mediciones/paso15_coach_naturalidad.txt`).
+- Datos: `scripts.expo_seed --email` regenera la cuenta de la expo (repetible); restaurado lo que el backfill de los tests cambió en la base local; 3 usuarios de prueba huérfanos borrados; `qwen2.5:3b` reinstalado.
+- Verificación: backend 551 passed; pgTAP 91; app 110; CI y DB en verde.
+- Pendiente: las 20 mediciones con Gmail real (p50/p95 por tramo). Por decisión del supervisor se hacen después del 15B, con la versión final de la app. Túnel cerrado y Gmail desconectado hasta entonces.
+- Commits: f199fc1 … 49a51eb.
+- Siguiente: Paso 15B.
+
 ## 2026-11-26 · Antes del Paso 15 — D17 (expo), aislamiento de tests y revocación de Gmail
 - RQ: RQN 01, RQF 02, RQF 03. Decisión **D17**: entrega en una expo con todo en el PC del supervisor y el camino real (sin modo demo); el Paso 16 pasa a «Kit de la expo» y lo de producción queda como trabajo futuro en el ROADMAP.
 - Cambios: `categorize.backfill(user_ids)` y su test (un movimiento de otro usuario queda intacto; falla si el backfill es global); `gmail.disconnect` devuelve si Google confirmó la revocación (200 o `invalid_token`) y `POST /gmail/disconnect` → `{revocada}`; botón «Desconectar Gmail» en Fuentes de Datos con confirmación y el aviso «No pudimos confirmar la revocación; revísala en tu cuenta de Google».
