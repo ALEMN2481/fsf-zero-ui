@@ -11,6 +11,8 @@ from app.config import settings
 def no_local_llm(monkeypatch):
     """Los tests no dependen de si Ollama está en marcha; los que lo usan lo simulan."""
     monkeypatch.setattr(settings, "ollama_url", "")
+    # Ni avisos push reales: los tests de avisos pasan su propio envío simulado.
+    monkeypatch.setattr(settings, "fcm_credentials_file", "")
     # Sin hilos de fondo que sigan vivos tras el test: quien lo necesita llama a run_pending.
     monkeypatch.setattr(categorize, "schedule", lambda user_id: None)
 

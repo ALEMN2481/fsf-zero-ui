@@ -5,9 +5,9 @@ import threading
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import quote
 from uuid import UUID
 
@@ -264,23 +264,39 @@ def recent_movements(
     own = engine_store.own_accounts(rest)
     rows = rest(
         f"transactions?status=neq.dismissed&order=occurred_at.desc&limit={limit}"
-        "&select=id,amount::text,direction,status,merchant,occurred_at,counts_in_budget,"
-        "to_last4,category:categories(id,name)"
+        f"&select={MOVEMENT_FIELDS}"
     )
-    return [
-        {
-            "id": r["id"],
-            "monto": r["amount"],
-            "direccion": r["direction"],
-            "estado": r["status"],
-            "comercio": r["merchant"],
-            "fecha": r["occurred_at"],
-            "categoria": (r["category"] or {}).get("name"),
-            "categoria_id": (r["category"] or {}).get("id"),
-            "tipo": engine_store.kind(r, own),
-        }
-        for r in rows
-    ]
+    return [_movement(r, own) for r in rows]
+
+
+MOVEMENT_FIELDS = (
+    "id,amount::text,direction,status,merchant,occurred_at,counts_in_budget,"
+    "to_last4,category:categories(id,name)"
+)
+
+
+def _movement(r: dict, own: set[str]) -> dict:
+    return {
+        "id": r["id"],
+        "monto": r["amount"],
+        "direccion": r["direction"],
+        "estado": r["status"],
+        "comercio": r["merchant"],
+        "fecha": r["occurred_at"],
+        "categoria": (r["category"] or {}).get("name"),
+        "categoria_id": (r["category"] or {}).get("id"),
+        "tipo": engine_store.kind(r, own),
+    }
+
+
+@app.get("/transactions/{tx_id}")
+def movement(tx_id: UUID, user: User) -> dict:
+    """Un movimiento (el del aviso push, aunque no esté entre los últimos), con el mismo formato."""
+    rest = lambda path: _rest(user, path)
+    rows = rest(f"transactions?id=eq.{tx_id}&select={MOVEMENT_FIELDS}")
+    if not rows:
+        raise HTTPException(404, "Movimiento no encontrado")
+    return _movement(rows[0], engine_store.own_accounts(rest))
 
 
 def _review(user: CurrentUser, tx_id: UUID, status: str) -> dict:
@@ -505,6 +521,42 @@ def coach_messages(user: User) -> list[dict]:
 @app.delete("/coach/messages", status_code=204)
 def coach_clear(user: User) -> Response:
     _rest(user, f"coach_messages?user_id=eq.{user.id}", "DELETE")
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- avisos push (Paso 14, D16)
+class DeviceIn(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)
+    platform: Literal["android", "ios"] = "android"
+
+
+@app.post("/devices", status_code=204)
+def register_device(body: DeviceIn, user: User) -> Response:
+    """D16: solo el backend escribe tokens (service_role) y siempre con el usuario del JWT; si el
+    teléfono ya estaba con otra cuenta, el token pasa a esta."""
+    service_db.rest(
+        "POST",
+        "device_tokens",
+        params={"on_conflict": "token"},
+        json={
+            "token": body.token,
+            "user_id": user.id,
+            "platform": body.platform,
+            "updated_at": datetime.now(UTC).isoformat(),
+        },
+        prefer="resolution=merge-duplicates",
+    )
+    return Response(status_code=204)
+
+
+@app.delete("/devices", status_code=204)
+def unregister_device(body: DeviceIn, user: User) -> Response:
+    """Al cerrar sesión: el teléfono deja de recibir los avisos de esta cuenta."""
+    service_db.rest(
+        "DELETE",
+        "device_tokens",
+        params={"token": f"eq.{body.token}", "user_id": f"eq.{user.id}"},
+    )
     return Response(status_code=204)
 
 

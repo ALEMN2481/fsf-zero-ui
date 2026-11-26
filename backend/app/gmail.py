@@ -15,7 +15,7 @@ import httpx
 import jwt
 from fastapi import HTTPException
 
-from app import service_db
+from app import push, service_db
 from app.config import settings
 from app.ingest import crypto, mail
 from app.ingest.store import ingest
@@ -192,8 +192,24 @@ def _access_token(conn: dict) -> str | None:
             {"grant_type": "refresh_token", "refresh_token": refresh}
         )["access_token"]
     except NeedsReconnect:
-        _update(conn["user_id"], status="needs_reconnect")
+        # Solo quien la pasa de active a needs_reconnect avisa: un aviso por caída (D16).
+        changed = service_db.rest(
+            "PATCH",
+            "gmail_connections",
+            params={
+                "user_id": f"eq.{conn['user_id']}",
+                "status": "eq.active",
+                "select": "user_id",
+            },
+            json={
+                "status": "needs_reconnect",
+                "updated_at": datetime.now(UTC).isoformat(),
+            },
+            prefer="return=representation",
+        ).json()
         log.warning("gmail necesita reconexión user=%s", conn["user_id"])
+        if changed:
+            push.gmail_disconnected(conn["user_id"])
         return None
 
 
@@ -305,10 +321,13 @@ def process_notification(gmail_address: str, history_id: int) -> int:
         full = _gmail("GET", access, f"messages/{mid}", params={"format": "raw"})
         full.raise_for_status()
         raw = base64.urlsafe_b64decode(full.json()["raw"] + "==")
-        if ingest(conn["user_id"], raw, "gmail", dedupe_key=f"gmail:{mid}") == "stored":
+        received_ms = int(meta.json().get("internalDate", 0)) or None
+        if (
+            ingest(conn["user_id"], raw, "gmail", f"gmail:{mid}", received_ms)
+            == "stored"
+        ):
             stored += 1
             # RQN 04: desde que Gmail recibió el correo (internalDate) hasta que quedó guardado.
-            received_ms = int(meta.json().get("internalDate", 0))
             if received_ms:
                 lag = int(datetime.now(UTC).timestamp() * 1000) - received_ms
                 log.info("latencia gmail→guardado ms=%d", lag)

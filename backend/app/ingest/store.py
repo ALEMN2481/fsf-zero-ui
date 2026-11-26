@@ -6,7 +6,7 @@ Los logs solo llevan metadatos: nunca asunto, cuerpo, direcciones completas ni c
 import logging
 from datetime import datetime
 
-from app import service_db
+from app import push, service_db
 from app.extract import pipeline
 from app.ingest import crypto, mail
 
@@ -18,7 +18,11 @@ def _aad(user_id: str, digest: str) -> bytes:
 
 
 def ingest(
-    user_id: str, raw: bytes, source: str = "gmail", dedupe_key: str | None = None
+    user_id: str,
+    raw: bytes,
+    source: str = "gmail",
+    dedupe_key: str | None = None,
+    received_ms: int | None = None,
 ) -> str:
     """Devuelve 'stored', 'duplicate', 'too_large' o el motivo del descarte ('no_rule', 'discarded', 'dkim').
 
@@ -84,4 +88,10 @@ def ingest(
     except Exception as e:  # noqa: BLE001 - el correo ya está guardado; un fallo no debe perderlo
         # Queda en pending_extraction. Solo el tipo: el mensaje podría llevar datos del correo.
         log.error("falló la extracción id=%s error=%s", rows[0]["id"], type(e).__name__)
+    try:
+        push.new_movements(
+            user_id, received_ms
+        )  # [received_ms]: cuándo lo recibió Gmail (RQN 04)
+    except Exception as e:  # noqa: BLE001 - un aviso que falla no debe perder el correo
+        log.error("falló el aviso id=%s error=%s", rows[0]["id"], type(e).__name__)
     return "stored"

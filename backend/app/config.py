@@ -43,5 +43,10 @@ class Settings(BaseSettings):
         30.0  # s; la primera llamada con el modelo descargado tarda ~13 s
     )
 
+    # Avisos push con FCM (Paso 14, D16). La clave de la cuenta de servicio vive fuera del repo;
+    # sin estos dos valores no se envían avisos.
+    fcm_credentials_file: str = ""
+    fcm_project_id: str = ""
+
 
 settings = Settings()

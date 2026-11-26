@@ -177,7 +177,7 @@ def env(monkeypatch):
     monkeypatch.setattr(
         gmail,
         "ingest",
-        lambda user, raw, source, dedupe_key: (
+        lambda user, raw, source, dedupe_key, received_ms=None: (
             ingested.append((user, dedupe_key)) or "stored"
         ),
     )
