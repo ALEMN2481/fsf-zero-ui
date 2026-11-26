@@ -625,7 +625,7 @@ def gmail_push(
     return Response(status_code=204)
 
 
-@app.post("/gmail/disconnect", status_code=204)
-def gmail_disconnect(user: User) -> Response:
-    gmail.disconnect(user.id)
-    return Response(status_code=204)
+@app.post("/gmail/disconnect")
+def gmail_disconnect(user: User) -> dict:
+    """Borra la conexión; [revocada]: si Google confirmó que el permiso ya no sirve."""
+    return {"revocada": gmail.disconnect(user.id)}

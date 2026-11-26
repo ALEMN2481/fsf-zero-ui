@@ -298,6 +298,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (_) => DataSourcesScreen(
         status: () async => ((await api.get('/me')) as Map<String, dynamic>)['gmail_status'] as String?,
         connect: _connectGmail,
+        disconnect: () async => ((await api.post('/gmail/disconnect')) as Map)['revocada'] == true,
         push: widget.push,
       ),
     ),

@@ -237,6 +237,57 @@ void main() {
     expect(b.sent.last.headers['Authorization'], 'Bearer nuevo');
   });
 
+  group('Fuentes de Datos: desconectar Gmail', () {
+    Future<void> pump(WidgetTester tester, Future<bool> Function() disconnect) async {
+      var status = 'active';
+      await tester.pumpWidget(
+        wrap(
+          DataSourcesScreen(
+            status: () async => status,
+            connect: () async {},
+            disconnect: () async {
+              status = 'none';
+              return disconnect();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Desconectar Gmail'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Desconectar'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('si Google no confirma la revocación, lo dice', (tester) async {
+      await pump(tester, () async => false);
+      expect(find.text(DataSourcesScreen.revokeUnconfirmed), findsOneWidget);
+      expect(find.text('Conectar Gmail'), findsOneWidget); // la conexión se borró igual
+    });
+
+    testWidgets('confirmada: «Gmail desconectado»', (tester) async {
+      await pump(tester, () async => true);
+      expect(find.text('Gmail desconectado'), findsOneWidget);
+      expect(find.text(DataSourcesScreen.revokeUnconfirmed), findsNothing);
+    });
+
+    testWidgets('la principal llama al backend y lee «revocada»', (tester) async {
+      final b = pushBackend();
+      b.routes['POST /gmail/disconnect'] = (_) => {'revocada': false};
+      await pumpHome(tester, b, FakePush());
+      await tester.tap(find.byTooltip('Más opciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Fuentes de datos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Desconectar Gmail'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Desconectar'));
+      await tester.pumpAndSettle();
+      expect(b.count('POST /gmail/disconnect'), 1);
+      expect(find.text(DataSourcesScreen.revokeUnconfirmed), findsOneWidget);
+    });
+  });
+
   group('Fuentes de Datos: avisos', () {
     Future<void> pump(WidgetTester tester, FakePush push, {double scale = 1}) async {
       await tester.pumpWidget(

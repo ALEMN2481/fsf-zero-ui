@@ -415,7 +415,7 @@ def test_a_401_then_invalid_grant_marks_needs_reconnect(env):
 def test_reconnecting_or_disconnecting_forgets_the_token(env):
     env.db.add()
     gmail._tokens["user-a"] = ("acc-viejo", time.monotonic() + 3000)
-    assert env.client.post("/gmail/disconnect").status_code == 204
+    assert env.client.post("/gmail/disconnect").status_code == 200
     assert "user-a" not in gmail._tokens
     gmail._tokens["user-a"] = ("acc-viejo", time.monotonic() + 3000)
     gmail.connect("user-a", "codigo", "verificador")
@@ -445,10 +445,29 @@ def test_renew_watches_only_renews_expiring_ones(env):
 
 def test_disconnect_revokes_and_deletes(env):
     env.db.add(refresh="ref-a-revocar")
-    assert env.client.post("/gmail/disconnect").status_code == 204
+    r = env.client.post("/gmail/disconnect")
+    assert (r.status_code, r.json()) == (200, {"revocada": True})
     revoke = [r for r in env.google.requests if str(r.url).startswith(gmail.REVOKE_URL)]
     assert parse_qs(revoke[0].content.decode())["token"] == ["ref-a-revocar"]
     assert env.db.conns == {}
+
+
+@pytest.mark.parametrize(
+    "status, body, revoked",
+    [
+        pytest.param(503, {"error": "backend_error"}, False, id="google-falla"),
+        pytest.param(400, {"error": "invalid_request"}, False, id="rechazada"),
+        pytest.param(400, {"error": "invalid_token"}, True, id="ya-no-servia"),
+    ],
+)
+def test_disconnect_says_whether_google_confirmed_the_revocation(
+    env, status, body, revoked
+):
+    env.db.add(refresh="ref-a-revocar")
+    env.google.fail["oauth2.googleapis.com/revoke"] = (status, body)
+    r = env.client.post("/gmail/disconnect")
+    assert r.json() == {"revocada": revoked}
+    assert env.db.conns == {}  # la conexión se borra igual: ya no se leen correos
 
 
 # ---------------------------------------------------------------- logs

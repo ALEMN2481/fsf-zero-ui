@@ -395,8 +395,13 @@ def renew_watches() -> int:
     return renewed
 
 
-def disconnect(user_id: str) -> None:
-    """Revoca el permiso en Google (si se puede) y borra la conexión."""
+def disconnect(user_id: str) -> bool:
+    """Revoca el permiso en Google y borra la conexión. Devuelve si Google confirmó la revocación.
+
+    La conexión se borra siempre (ya no se leen correos). Un 400 invalid_token también cuenta:
+    el permiso ya no servía.
+    """
+    revoked = True
     rows = service_db.rest(
         "GET",
         "gmail_connections",
@@ -410,8 +415,21 @@ def disconnect(user_id: str) -> None:
             user_id.encode(),
         ).decode()
         try:
-            http.post(REVOKE_URL, data={"token": refresh})
+            r = http.post(REVOKE_URL, data={"token": refresh})
+            revoked = r.status_code == 200 or (
+                r.status_code == 400 and _json_error(r) == "invalid_token"
+            )
         except httpx.HTTPError:
+            revoked = False
+        if not revoked:
             log.warning("no se pudo revocar el token en Google user=%s", user_id)
     service_db.rest("DELETE", "gmail_connections", params={"user_id": f"eq.{user_id}"})
     _tokens.pop(user_id, None)
+    return revoked
+
+
+def _json_error(r: httpx.Response) -> str | None:
+    try:
+        return r.json().get("error")
+    except ValueError:
+        return None

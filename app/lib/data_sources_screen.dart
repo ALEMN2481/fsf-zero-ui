@@ -6,11 +6,16 @@ import 'theme.dart';
 /// Fuentes de Datos (ajustes, D7 y D14): solo la conexión de Gmail y su estado. Sin reenvío de
 /// correos ni conexión bancaria (fuera de alcance).
 class DataSourcesScreen extends StatefulWidget {
-  const DataSourcesScreen({super.key, required this.status, required this.connect, this.push});
+  const DataSourcesScreen({super.key, required this.status, required this.connect, this.disconnect, this.push});
+
+  static const revokeUnconfirmed = 'No pudimos confirmar la revocación; revísala en tu cuenta de Google';
 
   /// Estado de Gmail de /me: null (sin conectar), 'active' o 'needs_reconnect'.
   final Future<String?> Function() status;
   final Future<void> Function() connect;
+
+  /// Borra la conexión y revoca el permiso; devuelve si Google confirmó la revocación.
+  final Future<bool> Function()? disconnect;
 
   /// Avisos push (Paso 14): estado del permiso y cómo activarlo. Sin [push], no se muestra.
   final Push? push;
@@ -57,6 +62,35 @@ class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindi
     }
   }
 
+  Future<void> _disconnect() async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Desconectar Gmail?'),
+        content: const Text('Dejaremos de leer tus correos y le quitaremos el permiso a la app en Google.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Desconectar')),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    String message;
+    try {
+      message = await widget.disconnect!()
+          ? 'Gmail desconectado'
+          : DataSourcesScreen.revokeUnconfirmed; // la conexión se borró igual
+    } catch (_) {
+      message = 'No se pudo desconectar Gmail, inténtalo de nuevo';
+    }
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 6)));
+    setState(() {
+      _status = widget.status();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,6 +115,7 @@ class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindi
               loading: snap.connectionState != ConnectionState.done,
               failed: snap.hasError,
               status: snap.data,
+              onDisconnect: widget.disconnect == null ? null : _disconnect,
               onConnect: () async {
                 await widget.connect();
                 if (mounted) {
@@ -118,11 +153,18 @@ class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindi
 }
 
 class _GmailCard extends StatelessWidget {
-  const _GmailCard({required this.loading, required this.failed, required this.status, required this.onConnect});
+  const _GmailCard({
+    required this.loading,
+    required this.failed,
+    required this.status,
+    required this.onConnect,
+    this.onDisconnect,
+  });
 
   final bool loading, failed;
   final String? status;
   final VoidCallback onConnect;
+  final VoidCallback? onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +196,14 @@ class _GmailCard extends StatelessWidget {
             style: const TextStyle(color: Fsf.textoSecundarioEnSuperficie),
           ),
           if (action != null) ...[const SizedBox(height: 16), FilledButton(onPressed: onConnect, child: Text(action))],
+          if (onDisconnect != null && !loading && (status == 'active' || status == 'needs_reconnect')) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Fsf.textoSecundarioEnSuperficie),
+              onPressed: onDisconnect,
+              child: const Text('Desconectar Gmail'),
+            ),
+          ],
         ],
       ),
     );
