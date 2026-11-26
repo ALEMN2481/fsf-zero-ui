@@ -25,7 +25,8 @@ class FsfMessagingService : FlutterFirebaseMessagingService() {
         val kind = data["tipo"] ?: return
         // RQN 04: de que Gmail recibió el correo a que el teléfono tiene el aviso (sin contenido).
         data["received_ms"]?.toLongOrNull()?.let {
-            Log.i("fsf.push", "latencia correo→aviso ms=${System.currentTimeMillis() - it} tipo=$kind")
+            // correo=: el mismo epoch ms que registra el backend, para emparejar los tramos (Paso 15).
+            Log.i("fsf.push", "latencia correo→aviso ms=${System.currentTimeMillis() - it} tipo=$kind correo=$it")
         }
         if (inForeground()) return
         val title = data["title"] ?: return
