@@ -10,6 +10,15 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-26 · Paso 15B — Ajustes de producto para la expo (D13, D14)
+- RQ: RQF 04, RQF 03, RQN 05, RQN 02, RQN 03.
+- Cambios (backend): `gps.week_by_day` y `/gps` → `semana_dias` (lunes a domingo en hora de Colombia, neto de devoluciones; los días previos al periodo se leen aparte); `POST /transactions` para el gasto en efectivo a mano (`source='manual'`, `payment_method='cash'`, `counts_in_budget` = «No salió de un retiro», sin aviso push, aprende la regla del comercio; solo gastos; monto `Decimal` > 0 que cabe en numeric(14, 2)); los movimientos traen `medio`.
+- Cambios (app): cabecera con dos burbujas (inicial y nombre o correo; ✦ Coach, bolsillos, ⚙ ajustes con Fuentes de datos, Presupuesto y Cerrar sesión); movimientos agrupados por día («Hoy», «Ayer», «Lunes 24») con icono de categoría en cuadro gris; `WeekBars` (7 barras sin librerías ni CustomPaint, un solo texto para el lector, letra de hoy en negrita); botón «+» → gasto a mano en 3 pasos (monto con teclado numérico formateado sin double → categoría → comercio opcional con la casilla) y mensaje «Gasto agregado» o «Gasto agregado · Ya estaba contado en tu retiro»; «Te quedan esta semana / este mes»; tutorial con la cabecera, el gráfico y «+»; test de RQN 05: el único gráfico permitido es `WeekBars`.
+- Verificación: backend 561 passed en la corrida completa (3 errores de preparación por `ReadTimeout` de Supabase local tras horas de carga; esos archivos pasan solos: 31 passed) y 12 tests nuevos del 15B; pgTAP 91; app `flutter analyze` sin problemas, `flutter test` → 127 passed (goldens 1–14 regenerados, 15 y 16a–c nuevos); emulador con FCM real: cabecera, gráfico, grupos, gasto desde retiro (no descuenta: $ 157.500 igual) y fuera de retiro ($ 157.500 → $ 152.500). Capturas `docs/capturas/paso15b_emulador_*.png` (correo tapado).
+- Commits: 8499bda, 74d7900, dd7a1c4.
+- Pendientes/riesgos: el perfil del supervisor no tiene nombre, así que la cabecera muestra el correo (en la expo se verá en pantalla); la cuenta tiene gastos de prueba de hoy (se limpian con `scripts.expo_seed`).
+- Siguiente: medición de las 20 facturas y cierre del Paso 15.
+
 ## 2026-11-26 · Paso 15 — Seguridad y latencia para la expo (en curso: falta la medición)
 - RQ: RQN 01, RQN 04, RQF 04. Decisiones D15 (ajuste del Coach) y D17.
 - Seguridad:
