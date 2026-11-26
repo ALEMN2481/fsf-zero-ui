@@ -170,8 +170,15 @@ def _summary(user: CurrentUser) -> dict:
 
 @app.get("/gps")
 def gps_state(user: User) -> dict:
-    """Saldo libre, presupuesto diario y semanal del periodo activo (fórmulas en D12)."""
-    return _jsonable(_summary(user))
+    """Saldo libre, presupuesto diario y semanal del periodo activo (fórmulas en D12).
+
+    `reservado`: lo apartado en todos los bolsillos (no solo en el periodo), para la tarjeta
+    «Reservado» de la principal (D14).
+    """
+    state = _summary(user)
+    if state["estado"] == "ok":
+        state["reservado"] = sum(_pocket_balances(user).values(), gps.ZERO)
+    return _jsonable(state)
 
 
 class BudgetIn(BaseModel):
@@ -309,10 +316,24 @@ def _pocket_balances(user: CurrentUser) -> dict[str, Decimal]:
 
 
 @app.get("/pockets")
-def pockets(user: User) -> list[dict]:
+def pockets(user: User) -> dict:
+    """Bolsillos con su saldo y su avance (% entero) y el total apartado: la app no calcula."""
     totals = _pocket_balances(user)
     rows = _rest(user, "pockets?select=id,name,target_amount::text&order=created_at")
-    return [{**p, "saldo": str(totals[p["id"]])} for p in rows]
+    pockets = [
+        {
+            **p,
+            "saldo": totals[p["id"]],
+            "porcentaje": gps.progress(
+                totals[p["id"]],
+                Decimal(p["target_amount"]) if p["target_amount"] else None,
+            ),
+        }
+        for p in rows
+    ]
+    return _jsonable(
+        {"total": sum((p["saldo"] for p in pockets), gps.ZERO), "bolsillos": pockets}
+    )
 
 
 class PocketIn(BaseModel):

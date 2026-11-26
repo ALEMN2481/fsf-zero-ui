@@ -114,6 +114,12 @@ def test_pocket_overdraft_returns_the_maximum(env, users):
     assert Decimal(gps(a["token"])["saldo_libre"]) == Decimal("300000.00")
 
     assert move("1.00", b["token"]).status_code == 404  # B no usa el bolsillo de A
-    [p] = client.get("/pockets", headers=bearer(a["token"])).json()
-    assert (p["name"], p["saldo"]) == ("Viaje", "500000.00")
-    assert client.get("/pockets", headers=bearer(b["token"])).json() == []
+    listed = client.get("/pockets", headers=bearer(a["token"])).json()
+    [p] = listed["bolsillos"]
+    assert (p["name"], p["saldo"], p["porcentaje"]) == ("Viaje", "500000.00", None)
+    assert listed["total"] == "500000.00"
+    assert gps(a["token"])["reservado"] == "500000.00"
+    assert client.get("/pockets", headers=bearer(b["token"])).json() == {
+        "total": "0.00",
+        "bolsillos": [],
+    }

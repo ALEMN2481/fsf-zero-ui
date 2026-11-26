@@ -18,6 +18,7 @@ from app.engine.gps import (
     Movement,
     classify,
     month_bounds,
+    progress,
     reference,
     renew,
     split,
@@ -301,3 +302,18 @@ def test_reference_proposes_spending_not_income():
         ]
     )
     assert ref == {"gasto": D("750000.00"), "ingresos": D("3000000.00")}
+
+
+@pytest.mark.parametrize(
+    "balance, target, expected",
+    [
+        ("400.00", "1000.00", 40),
+        ("999.99", "1000.00", 99),  # hacia abajo: no dice 100 % antes de tiempo
+        ("1000.00", "1000.00", 100),
+        ("1500.00", "1000.00", 150),
+        ("0.00", "1000.00", 0),
+        ("500.00", None, None),
+    ],
+)
+def test_pocket_progress(balance, target, expected):
+    assert progress(D(balance), D(target) if target else None) == expected

@@ -103,6 +103,14 @@ def reference(movements: list[Movement]) -> dict:
     }
 
 
+def progress(balance: Decimal, target: Decimal | None) -> int | None:
+    """Avance de un bolsillo hacia su meta, en % entero redondeado hacia abajo (sin tope: si se
+    pasa de la meta, pasa de 100). Sin meta, None."""
+    if target is None or target <= 0:
+        return None
+    return int(max(balance, ZERO) * 100 // target)
+
+
 def _net(movements) -> Decimal:
     total = ZERO
     for m in movements:
