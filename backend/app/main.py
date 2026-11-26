@@ -3,10 +3,12 @@ import json
 import logging
 import threading
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
 import httpx
@@ -14,7 +16,7 @@ from fastapi import Body, FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app import categorize, gmail
+from app import categorize, coach, gmail, service_db
 from app.auth import CurrentUser, User
 from app.config import settings
 from app.engine import gps
@@ -394,6 +396,115 @@ def pocket_move(pocket_id: UUID, body: PocketMove, user: User) -> dict:
         "pocket_id": str(pocket_id),
         "saldo": str(_pocket_balances(user)[str(pocket_id)]),
     }
+
+
+# ---------------------------------------------------------------- Coach (Paso 13, D2, D15)
+COACH_RETENTION = timedelta(days=90)
+
+
+def _coach_cutoff() -> str:
+    return quote((datetime.now(COLOMBIA) - COACH_RETENTION).isoformat())
+
+
+class CoachIn(BaseModel):
+    mensaje: str = Field(min_length=1, max_length=coach.MAX_QUESTION)
+
+
+def _coach_message(row: dict) -> dict:
+    if row["role"] == "user":
+        parts = [{"texto": row["content"], "cifra": False}]
+    else:
+        parts = coach.render(row["content"], row["valores"])
+    return {"rol": row["role"], "partes": parts, "creado": row["created_at"]}
+
+
+def _coach_insert(user: CurrentUser, rows: list[dict]) -> list[dict]:
+    """D15: solo el backend escribe en coach_messages (service_role), siempre a nombre del usuario."""
+    return service_db.rest(
+        "POST",
+        "coach_messages",
+        params={"select": "role,content,valores,created_at"},
+        json=[{"user_id": user.id, "source": None, "valores": {}, **r} for r in rows],
+        prefer="return=representation",
+    ).json()
+
+
+@app.post("/coach")
+def coach_ask(body: CoachIn, user: User) -> dict:
+    """Respuesta del Coach: las cifras salen del motor; el LLM solo redacta con marcadores."""
+    rest = lambda path: _rest(user, path)
+    today = _today()
+    asked_at = datetime.now(COLOMBIA)
+    # Lecturas independientes en paralelo: cada consulta a Supabase es un viaje de red.
+    with ThreadPoolExecutor() as pool:
+        purge = pool.submit(
+            _rest, user, f"coach_messages?created_at=lt.{_coach_cutoff()}", "DELETE"
+        )  # retención de 90 días
+        loaded = pool.submit(engine_store.load, rest, today)
+        balances = pool.submit(_pocket_balances, user)
+        names = pool.submit(rest, "categories?select=name&order=name")
+        recent = pool.submit(
+            rest,
+            f"coach_messages?select=role,content&order=created_at.desc&limit={coach.HISTORY}",
+        )
+    purge.result()
+    budget, movements, pocket_moves = loaded.result()
+    monday = today - timedelta(days=today.weekday())
+    # La semana suele caber en el periodo ya leído: solo se consulta aparte si empieza antes.
+    week = movements if budget and budget.start <= monday else None
+    data = coach.Data(
+        state=gps.summary(budget, today, movements, pocket_moves),
+        week=gps.week_by_category(
+            week if week is not None else engine_store.movements(rest, monday, today),
+            today,
+        ),
+        reserved=sum(balances.result().values(), gps.ZERO),
+        categories=[c["name"] for c in names.result()],
+        simulate=lambda extra: gps.simulate(
+            budget, today, movements, pocket_moves, extra
+        ),
+    )
+    history = recent.result()[::-1]
+    reply = coach.answer(
+        body.mensaje, data, history, ask=coach.ask_llm if settings.ollama_url else None
+    )
+    # Pregunta y respuesta en una sola escritura, cada una con su hora.
+    rows = _coach_insert(
+        user,
+        [
+            {
+                "role": "user",
+                "content": body.mensaje,
+                "created_at": asked_at.isoformat(),
+            },
+            {
+                "role": "assistant",
+                "content": reply.content,
+                "source": reply.source,
+                "valores": reply.values,
+                "created_at": datetime.now(COLOMBIA).isoformat(),
+            },
+        ],
+    )
+    row = next(r for r in rows if r["role"] == "assistant")
+    return {**_coach_message(row), "tipo": reply.intent, "fuente": reply.source}
+
+
+@app.get("/coach/messages")
+def coach_messages(user: User) -> list[dict]:
+    """La conversación de los últimos 90 días (como máximo 50 mensajes), de la más antigua a la última."""
+    rows = _rest(
+        user,
+        f"coach_messages?created_at=gte.{_coach_cutoff()}&order=created_at.desc&limit=50"
+        "&select=role,content,valores,created_at",
+    )
+    return [_coach_message(r) for r in reversed(rows)]
+
+
+@app.delete("/coach/messages", status_code=204)
+def coach_clear(user: User) -> Response:
+    _rest(user, f"coach_messages?user_id=eq.{user.id}", "DELETE")
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------- Gmail (Paso 08B, D7)

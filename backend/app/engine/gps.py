@@ -184,3 +184,25 @@ def summary(
             {"categoria": name, **values} for name, values in sorted(categories.items())
         ],
     }
+
+
+def simulate(
+    budget: Budget | None,
+    today: date,
+    movements: list[Movement],
+    pocket_moves: list[tuple[date, Decimal]],
+    extra: Decimal,
+) -> dict:
+    """Coach (Paso 13): el estado si hoy se gastara [extra] más. No guarda nada."""
+    hypothetical = Movement(today, extra, SPENDING, "Simulación")
+    return summary(budget, today, [*movements, hypothetical], pocket_moves)
+
+
+def week_by_category(movements: list[Movement], today: date) -> dict[str, Decimal]:
+    """Gasto neto por categoría de lunes a hoy (como en Gasto), solo las categorías con gasto > 0."""
+    monday = today - timedelta(days=today.weekday())
+    totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    for m in movements:
+        if monday <= m.day <= today and m.kind in (SPENDING, REFUND):
+            totals[m.category] += m.amount if m.kind == SPENDING else -m.amount
+    return {name: total for name, total in totals.items() if total > 0}
