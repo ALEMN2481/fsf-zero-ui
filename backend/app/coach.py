@@ -421,6 +421,23 @@ _NUMBER_WORDS = re.compile(
 )
 
 
+# Cantidades pequeñas de tiempo («los dos últimos días», «una vez»): no son cifras de dinero.
+# Se quitan antes de buscar números en palabras; montos, porcentajes y el resto se siguen bloqueando.
+_TIME_COUNT = re.compile(
+    r"\b(?:un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+"
+    r"(?:(?:ultim|primer|proxim|siguient)\w*\s+)?(?:dias?|semanas?|mes(?:es)?|vez|veces)\b"
+)
+# Dos marcadores seguidos («{a}: {b}») solo valen si el primero es un nombre (la categoría).
+_ADJACENT = re.compile(r"\{([^{}]+)\}[\s:;,.-]{0,3}\{")
+# Comillas de delimitador alrededor de un nombre: solo sirven en el prompt.
+_QUOTED = re.compile(r"«([^«»{}]{1,60})»")
+
+
+def unquote(text: str) -> str:
+    """«Alimentos» → Alimentos: las comillas eran delimitadores del prompt, no van al usuario."""
+    return _QUOTED.sub(r"\1", text)
+
+
 def normalize(text: str) -> str:
     """Una sola línea; un «$» pegado a un marcador sobra (el valor ya lo lleva)."""
     return " ".join(re.sub(r"\$\s*(?=\{)", "", text).split())
@@ -433,18 +450,22 @@ def check(text: str, allowed_markers: set[str], names: list[str]) -> str | None:
     used = MARKER.findall(text)
     if any(u not in allowed_markers for u in used):
         return "marcador_ajeno"
-    if len(used) != len(set(used)) or re.search(r"\}[\s:;,.-]{0,3}\{", text):
+    adjacent = [
+        m for m in _ADJACENT.findall(text) if CATALOG.get(m, (MONEY,))[0] != NAME
+    ]
+    if len(used) != len(set(used)) or adjacent:
         return "marcadores_repetidos"  # «{a}: {a}» o cifras pegadas sin explicación
     rest = _blank(MARKER.sub(" ", text), names)
     if any(unicodedata.category(c).startswith("N") for c in rest):
         return "digito"
     if re.search(r"[$%€{}\[\]]", rest):
         return "simbolo"
-    if _NUMBER_WORDS.search(fold(rest)):
+    if _NUMBER_WORDS.search(_TIME_COUNT.sub(" ", fold(rest))):
         return "numero_en_palabras"
     if re.search(r"marcador|llaves|placeholder|json|\bsistema\b", fold(rest)):
         return "habla_de_las_reglas"
-    if len(re.findall(r"[^\W\d_]{2,}", rest)) < 3:
+    # Los nombres de categoría cuentan como palabras («Llevas {…} en Alimentos» es una frase).
+    if len(re.findall(r"[^\W\d_]{2,}", MARKER.sub(" ", text))) < 3:
         return "sin_frase"  # solo la cifra, sin explicación
     if allowed_markers - CONTEXT_ONLY and not set(used) & (
         allowed_markers - CONTEXT_ONLY
@@ -456,105 +477,214 @@ def check(text: str, allowed_markers: set[str], names: list[str]) -> str | None:
 # ---------------------------------------------------------------- plantillas de respaldo
 
 
-def template(intent: str, v: dict, category: str | None, budget: bool) -> str:
-    """Respuesta fija por tipo, con marcadores (se sustituyen igual que los del LLM)."""
+def template(
+    intent: str, v: dict, category: str | None, budget: bool, variant: int = 0
+) -> str:
+    """Respuesta fija por tipo, con marcadores (se sustituyen igual que los del LLM).
+
+    [variant] elige entre 2 o 3 redacciones (la conversación las va rotando: no repite la misma
+    frase seguida). Ninguna lleva números ni comillas: las categorías van tal cual.
+    """
+
+    def pick(*options: str) -> str:
+        return options[variant % len(options)]
+
     if intent == OUT_OF_SCOPE:
-        return (
+        return pick(
             "Eso se sale de lo que puedo hacer: no doy recomendaciones de inversión, crédito, "
             "impuestos ni temas legales. Sí puedo contarte cuánto puedes gastar hoy, cuánto te "
-            "queda este mes o en qué gastas más."
+            "queda este mes o en qué gastas más.",
+            "En eso no te puedo ayudar: no doy consejos de inversión, crédito, impuestos ni temas "
+            "legales. Lo mío son tus cifras: pregúntame cuánto tienes para hoy o en qué se te va "
+            "más la plata.",
+            "Prefiero no darte recomendaciones de inversión, crédito, impuestos ni temas legales. "
+            "Si quieres, te cuento cómo vas este mes o cuánto puedes gastar hoy.",
         )
     if intent == ASK_AMOUNT:
-        return "Dime el monto con números, por ejemplo con el signo de pesos, y te cuento cómo quedarían tus cifras."
+        return pick(
+            "Dime el monto con números, por ejemplo con el signo de pesos, y te cuento cómo "
+            "quedarían tus cifras.",
+            "¿De cuánto sería el gasto? Escríbelo con números y te digo cómo quedarías.",
+        )
     if intent == "mayor_gasto":
         if "categoria_mayor_semana" in v:
-            return (
+            return pick(
                 "Esta semana donde más gastaste fue {categoria_mayor_semana}, con "
-                "{gasto_mayor_semana}."
+                "{gasto_mayor_semana}.",
+                "Lo que más pesa esta semana es {categoria_mayor_semana}: llevas "
+                "{gasto_mayor_semana}.",
+                "Esta semana la plata se te ha ido sobre todo en {categoria_mayor_semana}, con "
+                "{gasto_mayor_semana}.",
             )
         if "categoria_mayor_mes" in v:
-            return (
+            return pick(
                 "Esta semana no tienes gastos registrados. En el mes, donde más gastaste fue "
-                "{categoria_mayor_mes}, con {gasto_mayor_mes}."
+                "{categoria_mayor_mes}, con {gasto_mayor_mes}.",
+                "Esta semana aún no registras gastos; en el mes, lo que más pesa es "
+                "{categoria_mayor_mes}, con {gasto_mayor_mes}.",
             )
-        return "Todavía no tienes gastos registrados en este periodo."
+        return pick(
+            "Todavía no tienes gastos registrados en este periodo.",
+            "Aún no hay gastos registrados en este periodo.",
+        )
     if intent == "reservado":
-        return "Tienes {reservado} apartado en tus bolsillos."
+        return pick(
+            "Tienes {reservado} apartado en tus bolsillos.",
+            "En tus bolsillos tienes guardados {reservado}.",
+            "Llevas {reservado} ahorrados en tus bolsillos.",
+        )
     if intent == "medio_pago" and category in METHODS and budget:
         _, marker, label = METHODS[category]
-        return f"Este mes llevas {{{marker}}} en gastos {label}."
+        return pick(
+            f"Este mes llevas {{{marker}}} en gastos {label}.",
+            f"En lo que va del mes has pagado {{{marker}}} {label}.",
+        )
     if intent == "categoria" and category:
         week = f"{{gasto_semana_categoria:{category}}}"
         if not budget:
-            return f"Esta semana llevas {week} en «{category}»."
-        return f"Este mes llevas {{gasto_categoria:{category}}} en «{category}»; esta semana, {week}."
+            return pick(
+                f"Esta semana llevas {week} en {category}.",
+                f"En {category} llevas {week} esta semana.",
+            )
+        month = f"{{gasto_categoria:{category}}}"
+        return pick(
+            f"Este mes has gastado {month} en {category}; esta semana, {week}.",
+            f"En {category} llevas {month} este mes y {week} esta semana.",
+            f"En lo que va del mes llevas {month} en {category}; en esta semana, {week}.",
+        )
     if not budget:
-        return (
+        return pick(
             "Aún no tienes un presupuesto para este mes. Fíjalo en la pantalla principal y podré "
-            "contarte cuánto puedes gastar cada día."
+            "contarte cuánto puedes gastar cada día.",
+            "Aún no tienes un presupuesto para este mes. Cuando lo fijes en la pantalla "
+            "principal, te digo cuánto puedes gastar cada día.",
         )
     parts: list[str] = []
-    add = parts.append
+
+    def add(*options: str) -> None:
+        parts.append(pick(*options))
+
     if intent == "simulacion":
         if "sim_exceso" in v:
             add(
-                "Si gastas {monto_consultado} hoy, te pasarías {sim_exceso} de tu cuota de hoy."
+                "Si gastas {monto_consultado} hoy, te pasarías {sim_exceso} de tu cuota de hoy.",
+                "Con {monto_consultado} hoy te pasarías {sim_exceso} de lo que tienes para hoy.",
             )
         else:
             add(
-                "Si gastas {monto_consultado} hoy, aún te quedarían {sim_disponible_hoy} para hoy."
+                "Si gastas {monto_consultado} hoy, aún te quedarían {sim_disponible_hoy} para hoy.",
+                "Con {monto_consultado} hoy todavía te quedarían {sim_disponible_hoy} para el día.",
             )
         if "sim_exceso_mes" in v:
-            add("En el mes quedarías {sim_exceso_mes} por encima de tu presupuesto.")
+            add(
+                "En el mes quedarías {sim_exceso_mes} por encima de tu presupuesto.",
+                "En el mes te pasarías {sim_exceso_mes} de tu presupuesto.",
+            )
         else:
-            add("En el mes te quedarían {sim_saldo_libre}.")
+            add(
+                "En el mes te quedarían {sim_saldo_libre}.",
+                "Para el resto del mes tendrías {sim_saldo_libre}.",
+            )
         if "sim_diario_desde_manana" in v and "sim_exceso_mes" not in v:
-            add("Desde mañana tu diario quedaría en {sim_diario_desde_manana}.")
+            add(
+                "Desde mañana tu diario quedaría en {sim_diario_desde_manana}.",
+                "Y desde mañana podrías gastar {sim_diario_desde_manana} al día.",
+            )
     elif intent == "por_confirmar":
         if "en_revision" in v:
-            add("Tienes {en_revision} en gastos por confirmar.")
+            add(
+                "Tienes {en_revision} en gastos por confirmar.",
+                "Hay {en_revision} en gastos esperando que los confirmes.",
+            )
         else:
-            add("No tienes gastos por confirmar.")
+            add(
+                "No tienes gastos por confirmar.",
+                "Todo está al día: no hay gastos por confirmar.",
+            )
     elif intent == "ingresos":
         if "ingresos_periodo" in v:
-            add("Este mes te han entrado {ingresos_periodo}.")
+            add(
+                "Este mes te han entrado {ingresos_periodo}.",
+                "En lo que va del mes has recibido {ingresos_periodo}.",
+            )
         else:
-            add("Este mes aún no tienes ingresos registrados.")
+            add(
+                "Este mes aún no tienes ingresos registrados.",
+                "Todavía no hay ingresos registrados este mes.",
+            )
     elif intent == "semana":
         if "disponible_semana" in v:
-            add("De hoy al domingo te quedan {disponible_semana}.")
+            add(
+                "De hoy al domingo te quedan {disponible_semana}.",
+                "Para lo que queda de la semana tienes {disponible_semana}.",
+                "Hasta el domingo puedes gastar {disponible_semana}.",
+            )
         else:
-            add("Esta semana ya usaste lo que tenías planeado.")
+            add(
+                "Esta semana ya usaste lo que tenías planeado.",
+                "Lo planeado para esta semana ya se usó.",
+            )
     elif intent == "diario":
         if "exceso" in v and "diario_plan" in v:
             add(
                 "Hoy te pasaste {exceso} de tu cuota, así que tu diario desde mañana pasa de "
-                "{diario_plan} a {diario_desde_manana}."
+                "{diario_plan} a {diario_desde_manana}.",
+                "Como hoy te pasaste {exceso} de tu cuota, desde mañana tu diario baja de "
+                "{diario_plan} a {diario_desde_manana}.",
             )
         elif "diario_desde_manana" in v:
-            add("Desde mañana puedes gastar {diario_desde_manana} cada día.")
-        else:
-            add("Hoy es el último día del periodo: tu cuota de hoy es {cuota_hoy}.")
-    elif intent == "hoy":
-        if "exceso" in v:
-            add("Hoy ya usaste tu cuota y vas {exceso} por encima.")
-            if "diario_desde_manana" in v:
-                add("Desde mañana tu diario queda en {diario_desde_manana}.")
-        else:
-            add("Hoy puedes gastar {disponible_hoy} sin salirte de tu plan.")
-    if intent in ("mes", "semana", "resumen") or not parts:
-        if intent == "resumen" and "disponible_hoy" in v:
-            add("Hoy puedes gastar {disponible_hoy}.")
-        if "exceso_mes" in v:
-            add("Este mes vas {exceso_mes} por encima de tu presupuesto.")
-        elif "dias_restantes" in v:
             add(
-                "Este mes te quedan {saldo_libre} para los {dias_restantes} días que faltan."
+                "Desde mañana puedes gastar {diario_desde_manana} cada día.",
+                "A partir de mañana tu diario es de {diario_desde_manana}.",
             )
         else:
-            add("Hoy es el último día del periodo y te quedan {saldo_libre}.")
+            add(
+                "Hoy es el último día del periodo: tu cuota de hoy es {cuota_hoy}.",
+                "Hoy cierra el periodo y tu cuota del día es {cuota_hoy}.",
+            )
+    elif intent == "hoy":
+        if "exceso" in v:
+            add(
+                "Hoy ya usaste tu cuota y vas {exceso} por encima.",
+                "Hoy ya te pasaste de tu cuota: vas {exceso} por encima.",
+            )
+            if "diario_desde_manana" in v:
+                add(
+                    "Desde mañana tu diario queda en {diario_desde_manana}.",
+                    "Mañana arrancas con un diario de {diario_desde_manana}.",
+                )
+        else:
+            add(
+                "Hoy puedes gastar {disponible_hoy} sin salirte de tu plan.",
+                "Para hoy tienes {disponible_hoy} sin salirte de tu plan.",
+                "Hoy te quedan {disponible_hoy} para gastar tranquilo.",
+            )
+    if intent in ("mes", "semana", "resumen") or not parts:
+        if intent == "resumen" and "disponible_hoy" in v:
+            add(
+                "Hoy puedes gastar {disponible_hoy}.",
+                "Para hoy tienes {disponible_hoy}.",
+            )
+        if "exceso_mes" in v:
+            add(
+                "Este mes vas {exceso_mes} por encima de tu presupuesto.",
+                "Este mes ya te pasaste {exceso_mes} de tu presupuesto.",
+            )
+        elif "dias_restantes" in v:
+            add(
+                "Este mes te quedan {saldo_libre} para los {dias_restantes} días que faltan.",
+                "Para los {dias_restantes} días que faltan del mes tienes {saldo_libre}.",
+            )
+        else:
+            add(
+                "Hoy es el último día del periodo y te quedan {saldo_libre}.",
+                "Hoy cierra el periodo y aún tienes {saldo_libre}.",
+            )
         if intent == "mes":
-            add("Llevas gastado {gasto_periodo} de tu presupuesto de {presupuesto}.")
+            add(
+                "Llevas gastado {gasto_periodo} de tu presupuesto de {presupuesto}.",
+                "De tu presupuesto de {presupuesto} ya usaste {gasto_periodo}.",
+            )
     return " ".join(parts)
 
 
@@ -645,6 +775,32 @@ def build_prompt(
     return "\n".join(lines)
 
 
+_RETRY_HINTS = {
+    "digito": "escribiste una cifra con números; no escribas números ni los signos $ o %: usa {}",
+    "numero_en_palabras": "escribiste una cantidad con palabras; no escribas números: usa {}",
+    "simbolo": "escribiste un signo ($, % o llaves sueltas); el marcador ya lleva el signo: usa {}",
+    "marcador_ajeno": "usaste un marcador que no está en la lista; usa solo los de la lista, "
+    "por ejemplo {}",
+    "marcadores_repetidos": "repetiste un marcador o pusiste dos seguidos; usa cada uno una sola "
+    "vez, dentro de una frase, por ejemplo {}",
+    "sin_frase": "faltó una frase completa; explica la cifra con palabras usando {}",
+    "sin_marcador": "faltó la cifra; usa {}",
+    "habla_de_las_reglas": "hablaste de los marcadores o de las reglas; responde solo sobre las "
+    "finanzas del usuario usando {}",
+    "longitud": "la respuesta estaba vacía o era muy larga; escribe de una a tres frases con {}",
+}
+
+
+def retry_prompt(prompt: str, reason: str, main_marker: str) -> str:
+    """El mismo prompt con la corrección: por qué no sirvió y qué marcador usar (no la respuesta
+    anterior, que puede traer las cifras que se pidieron colar)."""
+    hint = _RETRY_HINTS.get(reason, "no cumplió las reglas; usa {}").format(
+        "{" + main_marker + "}"
+    )
+    body = prompt.removesuffix("JSON:")
+    return f"{body}Tu respuesta anterior no sirvió: {hint}. Escríbela de nuevo.\nJSON:"
+
+
 def ask_llm(system: str, prompt: str, model: str | None = None) -> str:
     """Llama a Ollama y devuelve el texto de «respuesta». Lanza httpx.HTTPError o ValueError."""
     data = json.loads(llm._generate(system, prompt, SCHEMA, model))
@@ -676,12 +832,12 @@ def render(content: str, vals: dict[str, str]) -> list[dict]:
     parts, last = [], 0
     for m in MARKER.finditer(content):
         if m.start() > last:
-            parts.append({"texto": content[last : m.start()], "cifra": False})
+            parts.append({"texto": unquote(content[last : m.start()]), "cifra": False})
         is_name = CATALOG.get(m.group(1), (MONEY,))[0] == NAME
         parts.append({"texto": vals.get(m.group(1), "—"), "cifra": not is_name})
         last = m.end()
     if last < len(content):
-        parts.append({"texto": content[last:], "cifra": False})
+        parts.append({"texto": unquote(content[last:]), "cifra": False})
     return parts
 
 
@@ -700,6 +856,15 @@ def answer(
     budget = data.state["estado"] == "ok"
     available = values(data, intent, extra, category)
     markers = allowed(intent, available, category)
+    # La plantilla no repite la redacción de la última respuesta del Coach.
+    last = next(
+        (h["content"] for h in reversed(history) if h["role"] == "assistant"), None
+    )
+    variant = next(
+        i
+        for i in range(3)
+        if i == 2 or template(intent, available, category, budget, i) != last
+    )
 
     content, source, reason = None, "plantilla", None
     if intent in TEMPLATE_ONLY:
@@ -712,20 +877,31 @@ def answer(
         sim_span = next(
             (span for value, span in amounts(question, names) if value == extra), None
         )
-        example = template(intent, available, category, budget)
+        example = template(intent, available, category, budget, variant)
         prompt = build_prompt(
             question, markers, data, available, history, sim_span, names, example
         )
-        try:
-            text = normalize(ask(SYSTEM, prompt))
-        except (httpx.HTTPError, ValueError, KeyError, TypeError) as e:
-            reason = f"llm_no_disponible:{type(e).__name__}"
-        else:
-            reason = check(text, markers, names)
-            if reason is None:
+        # Si no pasa la validación, se pide una vez más diciendo por qué; si vuelve a fallar,
+        # la plantilla. Un fallo de conexión no se reintenta (ya costó el tiempo de espera).
+        for attempt in (1, 2):
+            try:
+                text = unquote(normalize(ask(SYSTEM, prompt)))
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as e:
+                reason = f"llm_no_disponible:{type(e).__name__}"
+                break
+            failed = check(text, markers, names)
+            if failed is None:
                 content, source = text, "llm"
+                reason = None if attempt == 1 else f"reintento:{reason}"
+                break
+            reason = failed
+            main = next(
+                (m for m in MARKER.findall(example) if m in markers),
+                min(markers - CONTEXT_ONLY),
+            )
+            prompt = retry_prompt(prompt, failed, main)
     if content is None:
-        content = template(intent, available, category, budget)
+        content = template(intent, available, category, budget, variant)
     used = {m for m in MARKER.findall(content) if m in available}
     snapshot = {m: formatted(m, available[m]) for m in used}
     log.info("coach tipo=%s fuente=%s motivo=%s", intent, source, reason)

@@ -388,3 +388,109 @@ def test_by_method_nets_refunds():
         mov(WED, "5000", method=None),
     ]
     assert gps.by_method(moves) == {"credit_card": D("70000")}
+
+
+# ---------------------------------------------------------------- ajuste de naturalidad (Paso 15)
+def test_category_quotes_are_only_prompt_delimiters():
+    r, text, _ = run("¿Cuánto llevo en Alimentos?", httpx.ConnectError("caído"))
+    month = r.values["gasto_categoria:Alimentos"]
+    assert "«" not in text and "»" not in text
+    assert text.startswith(f"Este mes has gastado {month} en Alimentos;")
+    r, text, llm = run(
+        "¿Cuánto llevo en Alimentos?",
+        "Este mes has gastado {gasto_categoria:Alimentos} en «Alimentos».",
+    )
+    assert r.source == "llm" and text == f"Este mes has gastado {month} en Alimentos."
+    assert "«" not in r.content  # tampoco se guardan
+    assert "«Alimentos»" in llm.prompts[0]  # en el prompt siguen siendo delimitadores
+    # Mensajes guardados antes del cambio: se muestran sin comillas.
+    parts = coach.render("En «Gym 24h» llevas {x}.", {"x": "$ 1"})
+    assert coach.text_of(parts) == "En Gym 24h llevas $ 1."
+
+
+def test_a_rejected_reply_is_asked_once_more_with_the_reason():
+    def llm(prompt):
+        if "Tu respuesta anterior no sirvió" in prompt:
+            return "Hoy puedes gastar {disponible_hoy} tranquilo."
+        return "Hoy puedes gastar 50.000 pesos."
+
+    r, _text, fake = run("¿Cuánto puedo gastar hoy?", llm)
+    assert (r.source, r.reason) == ("llm", "reintento:digito")
+    assert len(fake.prompts) == 2
+    retry = fake.prompts[1]
+    assert "no escribas números" in retry and "usa {disponible_hoy}" in retry
+    assert "50.000" not in retry  # la respuesta rechazada no vuelve al modelo
+    assert retry.endswith("JSON:") and retry.count("JSON:") == 1
+
+
+def test_if_the_retry_also_fails_the_template_is_used():
+    r, _text, fake = run("¿Cuánto puedo gastar hoy?", "Hoy tienes 50 mil.")
+    assert (r.source, r.reason, len(fake.prompts)) == ("plantilla", "digito", 2)
+    r, _text, fake = run("¿Cuánto puedo gastar hoy?", httpx.ReadTimeout("lento"))
+    assert len(fake.prompts) == 1  # un fallo de conexión no se reintenta
+
+
+@pytest.mark.parametrize(
+    ("reply", "markers"),
+    [
+        ("En los dos últimos días llevas {gastado_hoy} en gastos.", {"gastado_hoy"}),
+        ("Una vez más, hoy puedes gastar {disponible_hoy}.", {"disponible_hoy"}),
+        ("Llevas {gasto_categoria:Gym 24h} en Gym 24h.", {"gasto_categoria:Gym 24h"}),
+        (
+            "{categoria_mayor_semana}: {gasto_mayor_semana}, lo que más pesa esta semana.",
+            {"categoria_mayor_semana", "gasto_mayor_semana"},
+        ),
+        ("Te quedan {saldo_libre} para los próximos tres días.", {"saldo_libre"}),
+    ],
+)
+def test_valid_natural_phrases_now_pass(reply, markers):
+    assert coach.check(reply, markers, NAMES) is None
+
+
+@pytest.mark.parametrize(
+    ("reply", "reason"),
+    [
+        ("Hoy puedes gastar dos mil pesos.", "numero_en_palabras"),
+        ("Te quedan dos millones {disponible_hoy}.", "numero_en_palabras"),
+        ("Te quedan {disponible_hoy}, dos más que ayer.", "numero_en_palabras"),
+        (
+            "Gastaste el doble que la semana pasada: {disponible_hoy}.",
+            "numero_en_palabras",
+        ),
+        ("Vas en el tres por ciento de {disponible_hoy} hoy.", "numero_en_palabras"),
+        ("Hoy {disponible_hoy}: {cuota_hoy} quedan, así es.", "marcadores_repetidos"),
+    ],
+)
+def test_amounts_in_words_are_still_blocked(reply, reason):
+    assert coach.check(reply, {"disponible_hoy", "cuota_hoy"}, NAMES) == reason
+
+
+@pytest.mark.parametrize("name", STATES)
+@pytest.mark.parametrize("question", QUESTIONS)
+def test_every_template_variant_is_valid_and_has_no_numbers(name, question):
+    d = STATES[name]
+    names = [n for n in d.categories if n != coach.INCOME]
+    intent, extra, category = coach.classify(question, names)
+    available = coach.values(d, intent, extra, category)
+    budget = d.state["estado"] == "ok"
+    seen = set()
+    for variant in range(3):
+        text = coach.template(intent, available, category, budget, variant)
+        seen.add(text)
+        used = set(coach.MARKER.findall(text))
+        assert used <= set(available), (variant, text)
+        rest = coach.MARKER.sub(" ", text)
+        assert not re.search(r"\d|[$%«»]", coach._blank(rest, names)), text
+    assert len(seen) >= 2, (intent, seen)  # al menos dos redacciones por tipo
+
+
+def test_the_template_does_not_repeat_the_last_wording():
+    d = data()
+    first = coach.answer("¿Cuánto tengo apartado?", d, [], ask=None)
+    history = [
+        {"role": "user", "content": "¿Cuánto tengo apartado?"},
+        {"role": "assistant", "content": first.content},
+    ]
+    second = coach.answer("¿Y cuánto tengo apartado ahora?", d, history, ask=None)
+    assert first.content != second.content
+    assert "{reservado}" in first.content and "{reservado}" in second.content

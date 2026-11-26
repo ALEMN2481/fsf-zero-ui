@@ -197,11 +197,20 @@ def unload_all() -> None:
 
 
 def run(model: str) -> None:
-    ask = lambda system, prompt: coach.ask_llm(system, prompt, model=model)
+    raw: list[
+        str
+    ] = []  # respuestas crudas del modelo: así se ve qué se descartó y por qué
+
+    def ask(system, prompt):
+        text = coach.ask_llm(system, prompt, model=model)
+        raw.append(text)
+        return text
+
     unload_all()
     rows, latencies, cold = [], [], None
     for question, intent, expected, over in CASES:
         data = demo(OVER if over else MOVES)
+        raw.clear()
         t = time.perf_counter()
         reply = coach.answer(question, data, [], ask=ask)
         elapsed = time.perf_counter() - t
@@ -227,6 +236,7 @@ def run(model: str) -> None:
                 "fuente": reply.source,
                 "motivo": reply.reason,
                 "texto": text,
+                "crudas": list(raw),
             }
         )
     n = len(rows)
@@ -249,6 +259,17 @@ def run(model: str) -> None:
         f"plantilla: {100 * (by_design + len(discarded)) / n:.0f} % (por diseño {by_design}, por descarte {len(discarded)})"
     )
     print("motivos de descarte:", sorted(r["motivo"] for r in discarded))
+    retried = sorted(
+        r["motivo"] for r in rows if (r["motivo"] or "").startswith("reintento")
+    )
+    print(f"reintentos que salvaron la respuesta: {len(retried)} {retried}")
+    llm_rows = [
+        r for r in rows if r["motivo"] not in (*coach.TEMPLATE_ONLY, "sin_datos")
+    ]
+    print(
+        f"plantilla por descarte, sobre las que van al LLM: "
+        f"{100 * len(discarded) / max(len(llm_rows), 1):.0f} % ({len(discarded)} de {len(llm_rows)})"
+    )
     if latencies:
         q = statistics.quantiles(latencies, n=20)
         print(
@@ -262,6 +283,10 @@ def run(model: str) -> None:
         print(
             f"- [{r['fuente']}{':' + r['motivo'] if r['motivo'] else ''}]{flags} {r['q']}\n    → {r['texto']}"
         )
+        # Lo que el modelo escribió y no se usó (descartes y primeros intentos fallidos).
+        for i, crude in enumerate(r["crudas"]):
+            if r["fuente"] == "plantilla" or i < len(r["crudas"]) - 1:
+                print(f"    ✗ intento {i + 1}: {crude}")
 
 
 if __name__ == "__main__":
