@@ -137,9 +137,9 @@ def test_simulating_then_spending_gives_the_same_figures(setup, monkeypatch):
     token, user_id = setup["token"], setup["id"]
     llm_says(monkeypatch, "Te quedarían {sim_saldo_libre} en el mes.")
     reply = ask(token, "¿Qué pasa si gasto $20.000 más hoy?")
-    assert (reply["tipo"], reply["fuente"]) == ("simulacion", "llm")
+    assert (reply["tipo"], reply["fuente"]) == ("simulacion", "plantilla")  # D10
     tx(user_id, "20000")
-    assert figures(reply) == [coach.cop(Decimal(gps(token)["saldo_libre"]))]
+    assert coach.cop(Decimal(gps(token)["saldo_libre"])) in figures(reply)
 
 
 def test_without_budget_it_invites_to_set_one(users, monkeypatch):

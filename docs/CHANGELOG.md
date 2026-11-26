@@ -10,6 +10,29 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 13 (ajustes) — Medio de pago, crédito como consejo y qwen2.5:7b medido
+- RQ: RQF 04, RQN 03. Decisiones D10 y D15 actualizadas.
+- Nube: `migration list --linked` (solo lectura) tras el `db push --remote` del supervisor → **8/8 migraciones en local y en remoto**, incluida `20261125060000_coach.sql`.
+- Cambios (backend):
+  - Fuera de alcance: crédito, préstamos y avances solo cuando se piden como consejo (`_CREDIT_ADVICE`); nombrar la tarjeta ya no bloquea.
+  - Tipo nuevo **medio de pago**: `Movement.method` (de `payment_method`), `gps.by_method` (gasto neto por medio, con devoluciones) y marcadores `gasto_tarjeta_credito`, `gasto_tarjeta_debito`, `gasto_transferencias`.
+  - Simulación: siempre con la plantilla (`TEMPLATE_ONLY`), sin LLM.
+  - Medición: 5 preguntas más (35): «¿Cuánto gasté con la tarjeta de crédito?», «¿Cuánto llevo en la T.Cred este mes?», «¿Cuánto llevo pagado con tarjeta débito?», «¿Cuánto he pagado por transferencia?» y «¿Me conviene sacar una tarjeta de crédito?» (fuera de alcance).
+- Medición (`python -m scripts.eval_coach qwen2.5:3b qwen2.5:7b`, `docs/mediciones/paso13_coach_3b_vs_7b.txt`, antes de pasar la simulación a plantilla):
+
+  | | qwen2.5:3b | qwen2.5:7b |
+  |---|---|---|
+  | Cifras del motor | 100 % (50) | 100 % (50) |
+  | Marcador correcto | 97 % | 100 % |
+  | Tipo correcto | 100 % | 100 % |
+  | Plantilla | 26 % (6 diseño, 3 descarte) | 20 % (6 diseño, 1 descarte) |
+  | Latencia en frío | 18,4 s | 28,5 s |
+  | En caliente p50 / p95 | 1,41 s / 2,67 s | 4,44 s / 13,34 s |
+
+  Redacción: el 7b corrige «Si me compro unos tenis… te pasaría de mi cuota» → «Si compras los tenis por $ 250.000, te pasarías $ 91.667 de tu cuota de hoy». En caliente supera los ~4 s: se mantiene qwen2.5:3b y la simulación pasa a plantilla.
+- Verificación: ruff OK; `test_coach.py` → 131 passed (clasificación de 8 preguntas de crédito y medio de pago, cifra por medio, marcador de otro medio → plantilla, `by_method` con devoluciones, simulación sin LLM); suite con Supabase local → **433 passed** (3 fallaron primero por timeouts de Auth con el 7b cargado en memoria; tras descargar los modelos, los 16 tests de esos archivos → passed); sin Supabase → 397 passed, 35 skipped.
+- Siguiente: plan del Paso 14 (push FCM).
+
 ## 2026-11-25 · Paso 13 — Coach (chat con cifras del motor)
 - RQ: RQF 04, RQN 03, RQN 05, RQN 01. Decisión **D15** (`CONTEXT.md`).
 - Ajustes del supervisor al plan, aplicados: marcadores por tipo de pregunta (uno ajeno → plantilla) y marcador esperado anotado por pregunta en la medición; nombres de categoría como datos (≤ 40 caracteres, entre «», fuera de la comprobación de dígitos); aviso en el estado vacío; decisiones (1) marcadores + instantánea, (2) solo el backend inserta (D15), (3) 90 días, (4) «Coach» / «Tu coach financiero».

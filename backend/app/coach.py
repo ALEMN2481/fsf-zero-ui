@@ -15,7 +15,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -89,6 +89,9 @@ CATALOG: dict[str, tuple[str, str]] = {
         "el nombre de la categoría en la que más gastó este mes",
     ),
     "gasto_mayor_mes": (MONEY, "lo que gastó este mes en esa categoría"),
+    "gasto_tarjeta_credito": (MONEY, "lo gastado este mes con tarjeta de crédito"),
+    "gasto_tarjeta_debito": (MONEY, "lo gastado este mes con tarjeta débito"),
+    "gasto_transferencias": (MONEY, "lo pagado este mes por transferencia"),
     "monto_consultado": (MONEY, "el monto por el que pregunta el usuario"),
     "sim_disponible_hoy": (
         MONEY,
@@ -125,6 +128,9 @@ OUT_OF_SCOPE, ASK_AMOUNT, NO_BUDGET = (
     "pide_monto",
     "sin_presupuesto",
 )
+# Siempre con plantilla, sin LLM. Simulación: qwen2.5:3b la redactaba con errores de concordancia
+# y qwen2.5:7b, que la redacta bien, tarda más de 4 s en caliente (D10, medido en el Paso 13).
+TEMPLATE_ONLY = (OUT_OF_SCOPE, ASK_AMOUNT, "simulacion")
 
 INTENTS: dict[str, tuple[str, ...]] = {
     "hoy": (
@@ -150,6 +156,7 @@ INTENTS: dict[str, tuple[str, ...]] = {
         "gasto_mayor_mes",
     ),
     "categoria": (),  # sus marcadores llevan el nombre de la categoría
+    "medio_pago": (),  # el marcador del medio que se pregunta (METHODS)
     "simulacion": (
         "monto_consultado",
         "sim_disponible_hoy",
@@ -177,9 +184,8 @@ _W = r"(?<![a-z0-9])"  # inicio de palabra (en texto plegado)
 _RULES = [
     (
         OUT_OF_SCOPE,
-        _W
-        + r"(invert\w*|inversion\w*|acciones|cripto\w*|bitcoin|cdt|fiduc\w*|prestam\w*"
-        r"|credito\w*|endeud\w*|hipotec\w*|impuest\w*|declaracion de renta|dian|legal\w*"
+        _W + r"(invert\w*|inversion\w*|acciones|cripto\w*|bitcoin|cdt|fiduc\w*"
+        r"|endeud\w*|hipotec\w*|impuest\w*|declaracion de renta|dian|legal\w*"
         r"|abogad\w*|demand\w*|leyes|ley|pension\w*|apuest\w*|apostar)(?![a-z])",
     ),
     ("mayor_gasto", r"((en|a) (que|donde)|cual|que categoria).*\bmas\b|\bmayor\b"),
@@ -200,6 +206,28 @@ _RULES = [
         r"\bmes\b|periodo|presupuesto|\bqueda\b|\bquedan\b|en total|gastado|\bllevo\b",
     ),
 ]
+# Crédito, préstamos y avances: fuera de alcance solo cuando se piden como consejo («¿pido un
+# crédito?»), no cuando se nombra la tarjeta («¿cuánto gasté con la tarjeta de crédito?»).
+_CREDIT_ADVICE = re.compile(
+    r"\b(pido|pedir|pida|saco|sacar|saque|solicit\w*|tomo|tomar|conviene|deberia|debo"
+    r"|recomiend\w*|vale la pena|me prestan|me aprueban|es buena idea)\b.*"
+    r"\b(credito|creditos|prestamo|prestamos|avance|avances|tarjeta)\b"
+    r"|\b(prestamo|prestamos)\b"
+)
+# Medio de pago → (expresión en texto plegado, marcador, nombre para la plantilla).
+METHODS = {
+    "credit_card": (
+        r"tarjeta de credito|\bt\.? ?cred(ito)?\b|\b(con|en|a) credito\b",
+        "gasto_tarjeta_credito",
+        "con tarjeta de crédito",
+    ),
+    "debit_card": (r"debito", "gasto_tarjeta_debito", "con tarjeta débito"),
+    "transfer": (
+        r"transferenc\w*|\bpse\b",
+        "gasto_transferencias",
+        "por transferencia",
+    ),
+}
 _SIM_WORDS = re.compile(
     r"\bsi (me )?(gasto|gastara|gastase|gastaria|compro|comprara|pago|pagara)\b"
     r"|que pasa(ria)? si|\by si\b"
@@ -254,13 +282,16 @@ def category_in(question: str, names: list[str]) -> str | None:
 def classify(question: str, names: list[str]) -> tuple[str, Decimal | None, str | None]:
     """→ (tipo, monto de la simulación, categoría). Reglas fijas, en este orden."""
     folded = fold(_blank(question, names))
-    if re.search(_RULES[0][1], folded):
+    if re.search(_RULES[0][1], folded) or _CREDIT_ADVICE.search(folded):
         return OUT_OF_SCOPE, None, None
     found = amounts(question, names)
     if _SIM_WORDS.search(folded) or (found and _SPEND_WORDS.search(folded)):
         if len(found) != 1:
             return ASK_AMOUNT, None, None  # ninguno o varios: se pide el monto
         return "simulacion", found[0][0], None
+    for method, (rule, _, _) in METHODS.items():
+        if re.search(rule, folded):
+            return "medio_pago", None, method  # el medio va en el lugar de la categoría
     for intent, rule in _RULES[1:3]:
         if re.search(rule, folded):
             return intent, None, None
@@ -285,6 +316,9 @@ class Data:
     reserved: Decimal
     categories: list[str]  # nombres (sin Ingresos)
     simulate: Callable[[Decimal], dict] | None = None
+    methods: dict[str, Decimal] = field(
+        default_factory=dict
+    )  # gps.by_method del periodo
 
 
 def values(
@@ -317,7 +351,9 @@ def values(
         if spent:
             top = max(spent, key=lambda n: (spent[n], n))
             out |= {"categoria_mayor_mes": top, "gasto_mayor_mes": spent[top]}
-        if category:
+        if intent == "medio_pago" and category in METHODS:
+            out[METHODS[category][1]] = data.methods.get(category, ZERO)
+        elif category:
             out[f"gasto_categoria:{category}"] = next(
                 (c["gasto"] for c in s["por_categoria"] if c["categoria"] == category),
                 ZERO,
@@ -325,7 +361,7 @@ def values(
         if extra is not None and data.simulate:
             out["monto_consultado"] = extra
             out |= _summary_values(data.simulate(extra), "sim_")
-    if category:
+    if category and intent != "medio_pago":
         out[f"gasto_semana_categoria:{category}"] = data.week.get(category, ZERO)
     return out
 
@@ -356,6 +392,8 @@ def allowed(intent: str, available: dict, category: str | None) -> set[str]:
     names = set(INTENTS.get(intent, ()))
     if intent == "categoria" and category:
         names |= {f"{m}:{category}" for m in CATEGORY_MARKERS}
+    if intent == "medio_pago" and category in METHODS:
+        names.add(METHODS[category][1])
     return {n for n in names if n in available}
 
 
@@ -442,6 +480,9 @@ def template(intent: str, v: dict, category: str | None, budget: bool) -> str:
         return "Todavía no tienes gastos registrados en este periodo."
     if intent == "reservado":
         return "Tienes {reservado} apartado en tus bolsillos."
+    if intent == "medio_pago" and category in METHODS and budget:
+        _, marker, label = METHODS[category]
+        return f"Este mes llevas {{{marker}}} en gastos {label}."
     if intent == "categoria" and category:
         week = f"{{gasto_semana_categoria:{category}}}"
         if not budget:
@@ -661,7 +702,7 @@ def answer(
     markers = allowed(intent, available, category)
 
     content, source, reason = None, "plantilla", None
-    if intent in (OUT_OF_SCOPE, ASK_AMOUNT):
+    if intent in TEMPLATE_ONLY:
         reason = intent
     elif not markers - CONTEXT_ONLY:
         reason = "sin_datos"
@@ -709,6 +750,7 @@ def engine_figures(data: Data, extras: list[Decimal] = ()) -> set[str]:
     out = set()
     probes = [(i, None, c) for i in INTENTS for c in [None, *data.categories]]
     probes += [("simulacion", e, None) for e in extras]
+    probes += [("medio_pago", None, m) for m in METHODS]
     for intent, extra, category in probes:
         for m, value in values(data, intent, extra, category).items():
             out.add(formatted(m, value))

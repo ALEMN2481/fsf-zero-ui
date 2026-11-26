@@ -44,6 +44,7 @@ class Movement:
     kind: str
     category: str
     in_review: bool = False
+    method: str | None = None  # payment_method: credit_card, debit_card, transfer…
 
 
 def classify(
@@ -196,6 +197,15 @@ def simulate(
     """Coach (Paso 13): el estado si hoy se gastara [extra] más. No guarda nada."""
     hypothetical = Movement(today, extra, SPENDING, "Simulación")
     return summary(budget, today, [*movements, hypothetical], pocket_moves)
+
+
+def by_method(movements: list[Movement]) -> dict[str, Decimal]:
+    """Gasto neto por medio de pago (como en Gasto). Coach: «¿cuánto gasté con la tarjeta?»."""
+    totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    for m in movements:
+        if m.method and m.kind in (SPENDING, REFUND):
+            totals[m.method] += m.amount if m.kind == SPENDING else -m.amount
+    return dict(totals)
 
 
 def week_by_category(movements: list[Movement], today: date) -> dict[str, Decimal]:

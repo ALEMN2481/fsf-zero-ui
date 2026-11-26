@@ -19,13 +19,13 @@ WED = date(2026, 11, 25)
 NAMES = ["Alimentos", "Transporte", "Entretenimiento", "Otros", "Gym 24h", "Ingresos"]
 
 
-def mov(day, amount, category="Alimentos"):
-    return Movement(day, D(amount), SPENDING, category)
+def mov(day, amount, category="Alimentos", method="credit_card"):
+    return Movement(day, D(amount), SPENDING, category, method=method)
 
 
 BASE = [
     mov(date(2026, 11, 3), "900000"),
-    mov(date(2026, 11, 23), "45000", "Transporte"),
+    mov(date(2026, 11, 23), "45000", "Transporte", "debit_card"),
     mov(date(2026, 11, 24), "120000"),
     mov(WED, "30000", "Gym 24h"),
 ]
@@ -42,6 +42,7 @@ def data(moves=BASE, today=WED, budget=NOV, pockets=POCKETS):
         reserved=D("350000"),
         categories=NAMES,
         simulate=lambda extra: gps.simulate(budget, today, moves, pockets, extra),
+        methods=gps.by_method(moves),
     )
 
 
@@ -148,8 +149,8 @@ def test_category_names_are_data_not_numbers():
 def test_the_llm_never_sees_amounts():
     d = data()
     _, _, llm = run(
-        "¿Qué pasa si gasto $20.000 más hoy? Tengo 3 hijos",
-        "Si gastas {monto_consultado} te quedan {sim_saldo_libre}.",
+        "¿Cuánto me queda esta semana? Ayer me dieron $20.000 y tengo 3 hijos",
+        "De hoy al domingo te quedan {disponible_semana}.",
         d,
         history=[
             {"role": "user", "content": "¿y si gasto 15.000?"},
@@ -160,11 +161,18 @@ def test_the_llm_never_sees_amounts():
     assert not re.search(r"\d", coach._blank(prompt, NAMES)), prompt
     for value in coach.engine_figures(d, [D("20000")]):
         assert value not in prompt or value in NAMES
-    assert "{monto_consultado}" in prompt and "{numero}" in prompt
+    assert prompt.count("{numero}") == 3  # 20.000, 3 y el 15.000 del historial
     assert "«Gym 24h»" in prompt  # las categorías van entre delimitadores
-    assert (
-        "{sim_saldo_libre}" in prompt and "{reservado}" not in prompt
-    )  # solo los de su tipo
+    # Solo los marcadores de su tipo.
+    assert "{disponible_semana}" in prompt and "{reservado}" not in prompt
+
+
+def test_simulation_always_uses_the_template():
+    r, text, llm = run(
+        "¿Qué pasa si gasto $20.000 más hoy?", "Si gastes {monto_consultado}."
+    )
+    assert (r.source, r.reason, llm.prompts) == ("plantilla", "simulacion", [])
+    assert text.startswith(f"Si gastas {coach.cop(D('20000'))} hoy")
 
 
 def test_prompt_injection_cannot_add_figures():
@@ -223,6 +231,13 @@ def test_out_of_scope_does_not_call_the_llm():
         ("¿Qué tengo por confirmar?", "por_confirmar"),
         ("¿Cuánto me entró este mes?", "ingresos"),
         ("¿Pido un crédito?", "fuera_de_alcance"),
+        ("¿Me conviene sacar una tarjeta de crédito?", "fuera_de_alcance"),
+        ("¿Saco un avance?", "fuera_de_alcance"),
+        ("¿Pido un préstamo para un carro?", "fuera_de_alcance"),
+        ("¿Cuánto gasté con la tarjeta de crédito?", "medio_pago"),
+        ("¿Cuánto llevo en la T.Cred este mes?", "medio_pago"),
+        ("¿Cuánto llevo pagado con tarjeta débito?", "medio_pago"),
+        ("¿Cuánto he pagado por transferencia?", "medio_pago"),
         (
             "¿Cuántas transacciones tengo?",
             "resumen",
@@ -344,3 +359,32 @@ def test_cop_matches_the_app_format():
     assert coach.cop(D("4250000")) == "$ 4.250.000"
     assert coach.cop(D("0.5")) == "$ 0,50"
     assert coach.cop(D("-66666.00")) == "-$ 66.666"
+
+
+def test_spending_by_payment_method_is_answered_with_the_engine_figure():
+    r, text, _ = run(
+        "¿Cuánto gasté con la tarjeta de crédito?",
+        "Este mes llevas {gasto_tarjeta_credito} con tu tarjeta de crédito.",
+    )
+    assert (r.intent, r.source) == ("medio_pago", "llm")
+    # Crédito: 900.000 + 120.000 + 30.000 (el débito de Transporte no cuenta).
+    assert coach.cop(D("1050000")) in text
+    r, text, _ = run(
+        "¿Cuánto llevo pagado con tarjeta débito?", httpx.ConnectError("x")
+    )
+    assert (
+        text == f"Este mes llevas {coach.cop(D('45000'))} en gastos con tarjeta débito."
+    )
+    r, _, _ = run(
+        "¿Cuánto gasté con la tarjeta de crédito?", "Llevas {gasto_tarjeta_debito}."
+    )
+    assert r.reason == "marcador_ajeno"  # el marcador de otro medio
+
+
+def test_by_method_nets_refunds():
+    moves = [
+        mov(WED, "100000"),
+        Movement(WED, D("30000"), gps.REFUND, "Alimentos", method="credit_card"),
+        mov(WED, "5000", method=None),
+    ]
+    assert gps.by_method(moves) == {"credit_card": D("70000")}

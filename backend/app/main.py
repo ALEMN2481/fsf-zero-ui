@@ -463,6 +463,7 @@ def coach_ask(body: CoachIn, user: User) -> dict:
         simulate=lambda extra: gps.simulate(
             budget, today, movements, pocket_moves, extra
         ),
+        methods=gps.by_method(movements),
     )
     history = recent.result()[::-1]
     reply = coach.answer(

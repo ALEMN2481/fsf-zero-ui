@@ -69,11 +69,12 @@ def movements(rest: Rest, first: date, last: date) -> list[Movement]:
             kind=kind(t, own),
             category=(t["category"] or {}).get("name") or "Sin categoría",
             in_review=t["status"] == "pending_review",
+            method=t.get("payment_method"),
         )
         for t in rest(
             f"transactions?{_bounds(first, last)}&status=neq.dismissed"
             "&select=amount::text,direction,status,occurred_at,counts_in_budget,"
-            "to_last4,category:categories(name)"
+            "to_last4,payment_method,category:categories(name)"
         )
     ]
 
