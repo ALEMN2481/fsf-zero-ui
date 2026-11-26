@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_screen.dart';
 import 'home_screen.dart';
 import 'launch_screen.dart';
+import 'push.dart';
 import 'session_storage.dart';
 import 'theme.dart';
 
@@ -23,6 +25,7 @@ const lockAfter = Duration(minutes: 5);
 const lockWarning = 'Activa un bloqueo de pantalla para proteger tu información';
 const _lockWarningShownKey = 'lock_warning_shown';
 const tutorialSeenKey = 'tutorial_seen';
+const pushAskedKey = 'push_asked';
 
 /// Textos del diálogo del sistema; sin ellos Android e iOS los muestran en inglés.
 const unlockMessages = <AuthMessages>[
@@ -45,8 +48,15 @@ Future<void> main() async {
     publishableKey: supabaseAnonKey,
     authOptions: const FlutterAuthClientOptions(localStorage: sessionStore),
   );
+  // Avisos push (Paso 14): sin google-services.json o sin Google Play, la app sigue sin avisos.
+  Push? push;
+  try {
+    await Firebase.initializeApp();
+    push = FirebasePush();
+  } catch (_) {}
   runApp(
     FsfApp(
+      push: push,
       auth: Supabase.instance.client.auth,
       sessionStore: sessionStore,
       storage: storage,
@@ -86,6 +96,7 @@ class FsfApp extends StatefulWidget {
     this.now = DateTime.now,
     this.openUrl = openInBrowser,
     this.changesFor,
+    this.push,
   });
 
   final GoTrueClient auth;
@@ -96,6 +107,7 @@ class FsfApp extends StatefulWidget {
   final DateTime Function() now;
   final Future<bool> Function(Uri url) openUrl;
   final Stream<void> Function(String userId)? changesFor;
+  final Push? push;
 
   @override
   State<FsfApp> createState() => _FsfAppState();
@@ -113,6 +125,9 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
   /// Tutorial «Primer vistazo»: null mientras se lee del almacenamiento; se muestra una sola vez.
   bool? _tutorialSeen;
 
+  /// El permiso de avisos se pide una sola vez (Paso 14).
+  bool _pushAsked = true;
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +140,9 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
     if (widget.auth.currentSession != null) _lock(); // al abrir la app con sesión guardada
     widget.storage.containsKey(key: tutorialSeenKey).then((seen) {
       if (mounted) setState(() => _tutorialSeen = seen);
+    });
+    widget.storage.containsKey(key: pushAskedKey).then((asked) {
+      if (mounted) setState(() => _pushAsked = asked);
     });
   }
 
@@ -227,6 +245,12 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
         onTutorialDone: () {
           widget.storage.write(key: tutorialSeenKey, value: '1');
           setState(() => _tutorialSeen = true);
+        },
+        push: widget.push,
+        askPush: !_pushAsked,
+        onPushAsked: () {
+          widget.storage.write(key: pushAskedKey, value: '1');
+          setState(() => _pushAsked = true);
         },
       );
     }

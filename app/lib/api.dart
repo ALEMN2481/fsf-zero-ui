@@ -40,7 +40,8 @@ class Api {
     timeout,
   );
 
-  Future<dynamic> delete(String path) => _send(client.delete(Uri.parse('$apiUrl$path'), headers: _headers));
+  Future<dynamic> delete(String path, [Object? body]) =>
+      _send(client.delete(Uri.parse('$apiUrl$path'), headers: _headers, body: body == null ? null : jsonEncode(body)));
 
   Future<dynamic> patch(String path, Object body) =>
       _send(client.patch(Uri.parse('$apiUrl$path'), headers: _headers, body: jsonEncode(body)));

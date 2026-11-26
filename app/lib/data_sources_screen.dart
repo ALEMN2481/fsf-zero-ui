@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'push.dart';
 import 'theme.dart';
 
 /// Fuentes de Datos (ajustes, D7 y D14): solo la conexión de Gmail y su estado. Sin reenvío de
 /// correos ni conexión bancaria (fuera de alcance).
 class DataSourcesScreen extends StatefulWidget {
-  const DataSourcesScreen({super.key, required this.status, required this.connect});
+  const DataSourcesScreen({super.key, required this.status, required this.connect, this.push});
 
   /// Estado de Gmail de /me: null (sin conectar), 'active' o 'needs_reconnect'.
   final Future<String?> Function() status;
   final Future<void> Function() connect;
+
+  /// Avisos push (Paso 14): estado del permiso y cómo activarlo. Sin [push], no se muestra.
+  final Push? push;
 
   @override
   State<DataSourcesScreen> createState() => _DataSourcesScreenState();
@@ -17,6 +21,7 @@ class DataSourcesScreen extends StatefulWidget {
 
 class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindingObserver {
   late Future<String?> _status = widget.status();
+  late Future<bool>? _push = widget.push?.enabled();
 
   @override
   void initState() {
@@ -36,6 +41,18 @@ class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindi
     if (state == AppLifecycleState.resumed) {
       setState(() {
         _status = widget.status();
+        _push = widget.push?.enabled();
+      });
+    }
+  }
+
+  /// Si Android ya no muestra el diálogo (permiso negado antes), se abren los ajustes de la app.
+  Future<void> _enablePush() async {
+    final push = widget.push!;
+    if (!await push.requestPermission()) await push.openSettings();
+    if (mounted) {
+      setState(() {
+        _push = push.enabled();
       });
     }
   }
@@ -74,6 +91,13 @@ class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindi
               },
             ),
           ),
+          if (_push != null) ...[
+            const SizedBox(height: 16),
+            FutureBuilder<bool>(
+              future: _push,
+              builder: (context, snap) => _PushCard(enabled: snap.data, onEnable: _enablePush),
+            ),
+          ],
           const SizedBox(height: 48),
           const Icon(Icons.lock_outline, color: Fsf.textoSecundario),
           const SizedBox(height: 8),
@@ -130,4 +154,44 @@ class _GmailCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PushCard extends StatelessWidget {
+  const _PushCard({required this.enabled, required this.onEnable});
+
+  final bool? enabled; // null: comprobando
+  final VoidCallback onEnable;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(Fsf.margen),
+    decoration: const BoxDecoration(color: Fsf.superficie, borderRadius: BorderRadius.all(Radius.circular(20))),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.notifications_none),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Avisos', style: Fsf.tarjeta)),
+            if (enabled == true) const Icon(Icons.check_circle, semanticLabel: 'Activados'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          switch (enabled) {
+            null => 'Comprobando…',
+            true => 'Activados. Te avisamos de tus gastos; en la pantalla de bloqueo no se ven cifras.',
+            false => 'Desactivados. Actívalos para saber cuándo registramos un gasto.',
+          },
+          key: const Key('avisos_estado'),
+          style: const TextStyle(color: Fsf.textoSecundarioEnSuperficie),
+        ),
+        if (enabled == false) ...[
+          const SizedBox(height: 16),
+          FilledButton(onPressed: onEnable, child: const Text('Activar avisos')),
+        ],
+      ],
+    ),
+  );
 }

@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -47,4 +48,11 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // FsfMessagingService extiende el servicio del plugin: necesita la clase de FCM (Paso 14).
+    // Misma BoM que firebase_core (FirebaseSDKVersion).
+    implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
+    implementation("com.google.firebase:firebase-messaging")
 }

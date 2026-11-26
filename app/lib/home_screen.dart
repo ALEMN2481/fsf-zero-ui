@@ -12,6 +12,7 @@ import 'data_sources_screen.dart';
 import 'money.dart';
 import 'movements.dart';
 import 'pockets_screen.dart';
+import 'push.dart';
 import 'theme.dart';
 import 'tutorial.dart';
 
@@ -32,6 +33,9 @@ class HomeScreen extends StatefulWidget {
     this.now = DateTime.now,
     this.showTutorial = false,
     this.onTutorialDone,
+    this.push,
+    this.askPush = false,
+    this.onPushAsked,
   });
 
   final http.Client client;
@@ -50,6 +54,13 @@ class HomeScreen extends StatefulWidget {
   final bool showTutorial;
   final VoidCallback? onTutorialDone;
 
+  /// Avisos push (Paso 14); null en los tests que no los usan.
+  final Push? push;
+
+  /// Primer uso: tras el tutorial se explica para qué son los avisos y se pide el permiso una vez.
+  final bool askPush;
+  final VoidCallback? onPushAsked;
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -61,6 +72,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _loading = true, _failed = false, _connecting = false;
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _changeSub;
+  final _pushSubs = <StreamSubscription<Object?>>[];
+  String? _pushToken;
+  bool _askingPush = false;
 
   @override
   void initState() {
@@ -69,6 +83,67 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _linkSub = (widget.links ?? AppLinks().uriLinkStream).listen(_onLink);
     _changeSub = widget.changes?.call().listen((_) => _load());
     _load();
+    _startPush();
+  }
+
+  /// Registra el dispositivo en el backend y, con la app abierta, refresca y lo dice brevemente.
+  Future<void> _startPush() async {
+    final push = widget.push;
+    if (push == null) return;
+    _pushSubs
+      ..add(push.tokenRefresh.listen(_registerDevice))
+      ..add(
+        push.foreground.listen((data) {
+          _load();
+          if (mounted && data['title'] != null) _say(data['title']!);
+        }),
+      );
+    try {
+      final token = await push.token();
+      if (token != null) await _registerDevice(token);
+    } catch (_) {
+      // Sin Google Play o sin red: la app funciona igual, sin avisos.
+    }
+  }
+
+  Future<void> _registerDevice(String token) async {
+    _pushToken = token;
+    try {
+      await api.post('/devices', {'token': token});
+    } catch (_) {}
+  }
+
+  /// Al cerrar sesión este teléfono deja de recibir los avisos de la cuenta.
+  Future<void> _signOut() async {
+    final token = _pushToken;
+    if (token != null) {
+      try {
+        await api.delete('/devices', {'token': token});
+        await widget.push?.deleteToken();
+      } catch (_) {}
+    }
+    widget.onSignOut();
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen old) {
+    super.didUpdateWidget(old);
+    if (old.showTutorial && !widget.showTutorial) _maybeAskPush();
+  }
+
+  /// Una sola vez, con contexto: después del tutorial y con las cifras ya en pantalla.
+  Future<void> _maybeAskPush() async {
+    final push = widget.push;
+    if (push == null || !widget.askPush || widget.showTutorial || _askingPush || _gps?['estado'] != 'ok') return;
+    _askingPush = true;
+    if (await push.enabled()) {
+      widget.onPushAsked?.call();
+      return;
+    }
+    if (!mounted) return;
+    final accept = await showModalBottomSheet<bool>(context: context, builder: (_) => const PushPrompt());
+    widget.onPushAsked?.call();
+    if (accept == true) await push.requestPermission();
   }
 
   @override
@@ -76,6 +151,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     _changeSub?.cancel();
+    for (final s in _pushSubs) {
+      s.cancel();
+    }
     super.dispose();
   }
 
@@ -86,7 +164,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// Vuelta del backend tras conectar Gmail: co.finanzassinfiltro.fsfapp://gmail-connected?status=ok|error
   void _onLink(Uri uri) {
-    if (uri.host != 'gmail-connected' || !mounted) return;
+    if (!mounted) return;
+    // Al tocar un aviso push (Paso 14).
+    if (uri.host == 'movimiento' && uri.pathSegments.isNotEmpty) {
+      _openMovementById(uri.pathSegments.first);
+      return;
+    }
+    if (uri.host == 'fuentes') {
+      _openSources();
+      return;
+    }
+    if (uri.host != 'gmail-connected') return;
     _load();
     if (uri.queryParameters['status'] != 'ok') _say('No se pudo conectar Gmail, inténtalo de nuevo');
   }
@@ -104,6 +192,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _failed = _gps!['estado'] == null;
         _loading = false;
       });
+      _maybeAskPush();
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -156,6 +245,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (_) => DataSourcesScreen(
         status: () async => ((await api.get('/me')) as Map<String, dynamic>)['gmail_status'] as String?,
         connect: _connectGmail,
+        push: widget.push,
       ),
     ),
   );
@@ -171,6 +261,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (_) => CoachScreen(api: api, now: widget.now),
     ),
   );
+
+  Future<void> _openMovementById(String id) async {
+    try {
+      final m = await api.get('/transactions/$id') as Map<String, dynamic>;
+      if (mounted) _openMovement(m);
+    } catch (_) {
+      if (mounted) _say('No encontramos ese movimiento');
+    }
+  }
 
   void _openMovement(Map<String, dynamic> m) => showModalBottomSheet<void>(
     context: context,
@@ -202,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             onSelected: (value) => switch (value) {
               'budget' => _openBudget(),
               'sources' => _openSources(),
-              _ => widget.onSignOut(),
+              _ => _signOut(),
             },
             itemBuilder: (_) => [
               if (_gps?['estado'] == 'ok') const PopupMenuItem(value: 'budget', child: Text('Presupuesto')),
@@ -341,6 +440,34 @@ class ReservedCard extends StatelessWidget {
           child: Text(formatCop(amount), key: const Key('reservado'), style: Fsf.montoTarjeta.copyWith(fontSize: 20)),
         ),
       ],
+    ),
+  );
+}
+
+/// Por qué pedimos el permiso de avisos, antes del diálogo del sistema (Android 13+).
+class PushPrompt extends StatelessWidget {
+  const PushPrompt({super.key});
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, Fsf.margen),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('¿Te avisamos?', style: Fsf.tituloSeccion),
+          const SizedBox(height: 12),
+          const Text(
+            'Te avisamos cuando registremos un gasto o haya algo por confirmar. '
+            'En la pantalla de bloqueo no se ven cifras.',
+            style: TextStyle(fontSize: 16, height: 1.5),
+          ),
+          const SizedBox(height: 24),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Activar avisos')),
+          const SizedBox(height: 8),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Ahora no')),
+        ],
+      ),
     ),
   );
 }
