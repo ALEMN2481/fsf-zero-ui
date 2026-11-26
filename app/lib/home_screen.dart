@@ -66,7 +66,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  late final api = Api(widget.client, widget.token);
+  // Getter, no late final: Supabase renueva el token cada hora y la principal se reconstruye con el
+  // nuevo; con el cliente guardado, a la hora todo daba 401 (visto al tocar un aviso, Paso 14).
+  Api get api => Api(widget.client, widget.token);
   Map<String, dynamic>? _gps, _me;
   List<Map<String, dynamic>> _movements = const [];
   bool _loading = true, _failed = false, _connecting = false;

@@ -18,6 +18,9 @@
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
+            <!-- Los enlaces de la app los maneja app_links (principal). Con el enlace profundo propio de
+                 Flutter, además se apilaba otra principal al tocar un aviso (Paso 14). -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"

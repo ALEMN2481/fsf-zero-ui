@@ -163,6 +163,18 @@ void main() {
     expect((push.deleted, out), (1, 1));
   });
 
+  testWidgets('con el token renovado, las llamadas usan el nuevo (no dan 401 a la hora)', (tester) async {
+    final b = pushBackend();
+    Widget home(String token) =>
+        wrap(HomeScreen(client: b.client, token: token, onSignOut: () {}, links: const Stream.empty(), now: () => now));
+    await tester.pumpWidget(home('viejo'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(home('nuevo')); // Supabase renovó la sesión
+    await tester.drag(find.byType(ListView).first, const Offset(0, 400)); // tirar para refrescar
+    await tester.pumpAndSettle();
+    expect(b.sent.last.headers['Authorization'], 'Bearer nuevo');
+  });
+
   group('Fuentes de Datos: avisos', () {
     Future<void> pump(WidgetTester tester, FakePush push, {double scale = 1}) async {
       await tester.pumpWidget(
