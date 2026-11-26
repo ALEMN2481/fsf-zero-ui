@@ -1,6 +1,6 @@
-fastapi[standard]==0.115.*
+fastapi[standard]==0.165.*  # 0.115 fijaba starlette 0.46, con vulnerabilidades (pip-audit, Paso 15)
 pydantic-settings==2.*
 pyjwt[crypto]==2.*
 cryptography==50.*  # AES-GCM de los correos (Paso 08)
 defusedxml==0.7.*  # XML de facturas sin DTD ni entidades (Paso 09)
-mcp==1.30.*  # servidor MCP de demostración (Paso 09, D9); la 2.x exige starlette>=1 y FastAPI 0.115 no
+mcp==1.30.*  # servidor MCP de demostración (Paso 09, D9)

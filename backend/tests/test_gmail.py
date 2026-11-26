@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from app import gmail, service_db
+from app import push as app_push
 from app.auth import CurrentUser, current_user
 from app.config import settings
 from app.ingest import crypto
@@ -359,6 +360,29 @@ def test_push_downloads_only_candidates_and_dedupes_by_gmail_id(env, caplog):
     assert env.google.calls("format=raw") == 1  # el boletín no se descarga entero
     assert env.db.conns["user-a"]["history_id"] == 130
     assert "latencia gmail→guardado ms=" in caplog.text  # medida para RQN 04
+
+
+def test_push_records_when_pubsub_published_and_when_it_arrived(env, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        gmail,
+        "process_notification",
+        lambda address, history_id: seen.append(app_push.PUBSUB_TIMES.get()),
+    )
+    data = base64.b64encode(
+        b'{"emailAddress":"usuario.ejemplo@gmail.com","historyId":125}'
+    ).decode()
+    before = int(time.time() * 1000)
+    r = env.client.post(
+        "/gmail/push",
+        json={"message": {"data": data, "publishTime": "2026-11-26T12:54:41.123Z"}},
+        headers={"Authorization": f"Bearer {push_token()}"},
+    )
+    assert r.status_code == 204
+    [(published, arrived)] = seen
+    assert published == 1795697681123  # 2026-11-26T12:54:41.123Z en epoch ms
+    assert before <= arrived <= int(time.time() * 1000)
+    assert app_push.PUBSUB_TIMES.get() is None  # no se queda pegado a otro aviso
 
 
 def test_invalid_grant_marks_needs_reconnect_without_retrying(env):

@@ -2,11 +2,12 @@ import base64
 import json
 import logging
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from time import monotonic
 from typing import Annotated, Literal
 from urllib.parse import quote
 from uuid import UUID
@@ -16,13 +17,14 @@ from fastapi import Body, FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app import categorize, coach, gmail, service_db
+from app import categorize, coach, gmail, push, service_db
 from app.auth import CurrentUser, User
 from app.config import settings
 from app.engine import gps
 from app.engine import store as engine_store
 from app.extract import llm
 from app.extract.bancolombia import COLOMBIA
+from app.ingest import store as ingest_store
 
 # Los mensajes de la app (fsf.*) solo llevan metadatos; sin esto uvicorn solo mostraría avisos y errores.
 logging.basicConfig(
@@ -34,12 +36,21 @@ logging.basicConfig(
 async def lifespan(_app: FastAPI):
     # Precarga el LLM de respaldo en segundo plano: el arranque no espera ni falla si Ollama no está.
     threading.Thread(target=llm.preload, daemon=True).start()
+    if settings.reprocess_on_start:
+        threading.Thread(target=_reprocess_quietly, daemon=True).start()
     # Clientes HTTP compartidos: nuevos en cada arranque y cerrados al apagar (los tests arrancan
     # la app más de una vez).
     service_db.http, gmail.http = service_db.new_client(), httpx.Client(timeout=10)
     yield
     service_db.http.close()
     gmail.http.close()
+
+
+def _reprocess_quietly() -> None:
+    try:
+        ingest_store.reprocess_pending()
+    except Exception as e:  # noqa: BLE001 - hilo de fondo: el arranque no depende de esto
+        log.error("falló el reproceso al arrancar error=%s", type(e).__name__)
 
 
 app = FastAPI(title="Finanzas Sin Filtro API", lifespan=lifespan)
@@ -64,6 +75,8 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # httpcore en DEBUG registra las cabeceras de respuesta, que repiten la URL con los filtros (p. ej. el
 # monto al buscar el movimiento del banco que completa una factura).
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+# Starlette >= 1 usa httpx2 en su cliente: también registraría la URL con su query (Paso 15).
+logging.getLogger("httpx2").setLevel(logging.WARNING)
 
 
 def _call(
@@ -453,9 +466,33 @@ def _coach_insert(user: CurrentUser, rows: list[dict]) -> list[dict]:
     ).json()
 
 
+COACH_LIMIT, COACH_WINDOW = (
+    60,
+    600,
+)  # preguntas por usuario cada 10 min (D17: cuenta compartida)
+# shortcut: ventana en memoria, válida con un solo proceso (la expo, D17); con varias instancias,
+# contarlas en la BD o en un almacén compartido.
+_coach_asks: dict[str, deque[float]] = defaultdict(deque)
+_coach_asks_lock = threading.Lock()
+
+
+def _coach_allowed(user_id: str) -> bool:
+    now = monotonic()
+    with _coach_asks_lock:
+        asks = _coach_asks[user_id]
+        while asks and asks[0] <= now - COACH_WINDOW:
+            asks.popleft()
+        if len(asks) >= COACH_LIMIT:
+            return False
+        asks.append(now)
+        return True
+
+
 @app.post("/coach")
 def coach_ask(body: CoachIn, user: User) -> dict:
     """Respuesta del Coach: las cifras salen del motor; el LLM solo redacta con marcadores."""
+    if not _coach_allowed(user.id):
+        raise HTTPException(429, "Hiciste muchas preguntas seguidas; espera un momento")
     rest = lambda path: _rest(user, path)
     today = _today()
     asked_at = datetime.now(COLOMBIA)
@@ -611,6 +648,7 @@ def gmail_push(
     body: Annotated[dict, Body()], authorization: Annotated[str | None, Header()] = None
 ) -> Response:
     """Aviso de Pub/Sub: un buzón conectado tiene novedades."""
+    arrived_ms = int(datetime.now(UTC).timestamp() * 1000)
     gmail.verify_push(authorization)
     try:
         data = json.loads(base64.b64decode(body["message"]["data"]))
@@ -619,9 +657,17 @@ def gmail_push(
         return Response(
             status_code=204
         )  # mensaje malformado: se confirma para que no se reintente
-    gmail.process_notification(
-        address, history_id
-    )  # un fallo pasajero da 500 y Pub/Sub reintenta
+    published = body["message"].get("publishTime")  # RFC 3339, lo pone Pub/Sub
+    try:
+        published_ms = int(datetime.fromisoformat(published).timestamp() * 1000)
+    except (TypeError, ValueError):  # sin publishTime o con otro formato
+        published_ms = None
+    timing = push.PUBSUB_TIMES.set((published_ms, arrived_ms))
+    try:
+        # Un fallo pasajero da 500 y Pub/Sub reintenta.
+        gmail.process_notification(address, history_id)
+    finally:
+        push.PUBSUB_TIMES.reset(timing)
     return Response(status_code=204)
 
 

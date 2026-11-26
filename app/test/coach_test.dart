@@ -130,6 +130,20 @@ void main() {
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '¿Cuánto llevo en Alimentos?');
   });
 
+  testWidgets('con el límite de uso, lo dice y la pregunta vuelve al campo', (tester) async {
+    final b = FakeBackend({
+      'GET /coach/messages': (_) => const [],
+      'POST /coach': (_) => http.Response('{"detail":"$tooManyQuestions"}', 429),
+    });
+    await tester.pumpWidget(wrap(CoachScreen(api: Api(b.client, 't'), now: () => now)));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '¿Cuánto llevo?');
+    await tester.tap(find.byTooltip('Enviar'));
+    await tester.pumpAndSettle();
+    expect(find.text(tooManyQuestions), findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '¿Cuánto llevo?');
+  });
+
   testWidgets('historial y borrar la conversación', (tester) async {
     final b = await open(tester, messages: history);
     expect(find.text('¿Cuánto puedo gastar hoy?'), findsOneWidget);

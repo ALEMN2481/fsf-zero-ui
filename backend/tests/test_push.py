@@ -1,5 +1,6 @@
 """Paso 14 (D16): avisos push. Unitarios sin BD e integración contra Supabase LOCAL con FCM simulado."""
 
+import logging
 import re
 from datetime import datetime
 from decimal import Decimal
@@ -210,6 +211,67 @@ def test_the_notice_goes_out_before_marking_the_email(env, monkeypatch):
         ["pending_extraction"]
     ]  # el movimiento ya existe; el correo, aún sin marcar
     assert _email_and_movements(user_id)[0] == ["extracted"]
+
+
+@requires_local
+def test_the_notice_logs_each_stretch_without_content(env, users, fcm, caplog):
+    caplog.set_level(logging.INFO, logger="fsf.push")
+    user_id, _ = env
+    device("tok-a", users["a"])
+    token = push.PUBSUB_TIMES.set((1000, 2000))
+    try:
+        ingest(user_id, today_alert(), "gmail", "gmail:tramos", received_ms=500)
+    finally:
+        push.PUBSUB_TIMES.reset(token)
+    [line] = [r.getMessage() for r in caplog.records if "tramos" in r.getMessage()]
+    assert re.fullmatch(
+        r"tramos correo=500 publicado=1000 llegada=2000 guardado=\d+ fcm=\d+ "
+        r"tipo=gasto_registrado",
+        line,
+    )
+
+
+@requires_local
+def test_supabase_errors_do_not_carry_the_filters_into_the_logs():
+    from app import service_db
+
+    with pytest.raises(httpx.HTTPStatusError) as e:
+        service_db.rest(
+            "GET",
+            "gmail_connections",
+            params={
+                "gmail_address": "eq.persona.privada@gmail.com",
+                "select": "noexiste",
+            },
+        )
+    assert str(e.value) == "Supabase GET gmail_connections respondió 400"
+
+
+@requires_local
+def test_the_whole_flow_logs_no_personal_data(env, users, fcm, monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    user_id, _ = env
+    device("tok-secreto-a", users["a"])
+    monkeypatch.setattr(settings, "ollama_url", "http://ollama.test")
+    monkeypatch.setattr(llm, "ask_category", lambda merchant, names: None)
+    gmail_address = svc(
+        "GET", f"gmail_connections?user_id=eq.{user_id}&select=gmail_address"
+    )[0]["gmail_address"]
+    ingest(user_id, today_alert(), "gmail", "gmail:logs", received_ms=1)
+    categorize.run_pending(user_id, ask=True)
+    assert len(fcm.sent) >= 1  # hubo avisos
+    for secret in (
+        MERCHANT,
+        "SUPERMERCADO",
+        "45.900",
+        "45900",
+        "*1111",
+        gmail_address,
+        users["a"]["email"],
+        "tok-secreto-a",
+        "Registramos",  # el texto del aviso tampoco
+    ):
+        assert secret not in caplog.text, secret
 
 
 @requires_local

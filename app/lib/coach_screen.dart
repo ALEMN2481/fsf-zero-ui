@@ -11,6 +11,7 @@ const coachSuggestions = [
   '¿Qué pasa si gasto \$20.000 más hoy?',
 ];
 const coachDisclaimer = 'El Coach te explica tus cifras; no es asesoría financiera profesional';
+const tooManyQuestions = 'Hiciste muchas preguntas seguidas; espera un momento';
 
 /// Chat del Coach (Paso 13, diseño «screen-chatbot» con los ajustes de DISENO.md). Las cifras llegan
 /// del backend ya formateadas como partes `{texto, cifra}`: la app solo pone en negrita las cifras.
@@ -76,12 +77,12 @@ class _CoachScreenState extends State<CoachScreen> {
     try {
       final reply = await widget.api.post('/coach', {'mensaje': text}, coachTimeout) as Map<String, dynamic>;
       if (mounted) setState(() => _messages = [..._messages, reply]);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       // La pregunta no se pierde: vuelve al campo para reintentar.
       setState(() => _messages = _messages.where((m) => !identical(m, mine)).toList());
       _input.text = text;
-      _say('El Coach no pudo responder, inténtalo de nuevo');
+      _say(e is ApiError && e.status == 429 ? tooManyQuestions : 'El Coach no pudo responder, inténtalo de nuevo');
     } finally {
       if (mounted) setState(() => _waiting = false);
       _toBottom();

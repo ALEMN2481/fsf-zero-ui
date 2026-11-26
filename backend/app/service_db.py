@@ -29,7 +29,14 @@ def rest(
         headers=headers,
         timeout=10,
     )
-    r.raise_for_status()  # el mensaje de error lleva la URL, nunca la clave
+    if r.is_error:
+        # Sin la URL: sus filtros pueden llevar datos personales (un correo, un comercio) y el
+        # mensaje de la excepción acaba en los logs con el traceback (Paso 15).
+        raise httpx.HTTPStatusError(
+            f"Supabase {method} {table.split('?')[0]} respondió {r.status_code}",
+            request=r.request,
+            response=r,
+        )
     return r
 
 

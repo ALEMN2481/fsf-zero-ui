@@ -14,6 +14,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from urllib.parse import quote
@@ -31,6 +32,18 @@ from app.extract.bancolombia import COLOMBIA
 log = logging.getLogger("fsf.push")
 
 SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
+
+# RQN 04 (Paso 15): cuándo publicó Pub/Sub el aviso de Gmail y cuándo llegó al backend (epoch ms).
+# Lo fija el endpoint de Pub/Sub; el aviso lo usa para registrar los tramos.
+PUBSUB_TIMES: ContextVar[tuple[int | None, int] | None] = ContextVar(
+    "pubsub_times", default=None
+)
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
 SPENT, REVIEW, RECONNECT = "gasto_registrado", "por_confirmar", "reconectar_gmail"
 CATEGORY = "categorizar"
 
@@ -285,6 +298,7 @@ def new_movements(
             state = pool.submit(lambda: gps.summary(*_load(rest, _today(), own)))
         tokens, state = tokens.result(), state and state.result()
     count = 0
+    saved_ms = _now_ms()  # el movimiento ya está escrito
     for row in rows:
         claimed = service_db.rest(
             "PATCH",
@@ -307,6 +321,19 @@ def new_movements(
         else:
             message, kind = spent_message(Decimal(row["amount"]), state), SPENT
         count += send(user_id, kind, message, extra, post, tokens)
+        if received_ms:
+            # Tramos de RQN 04 en epoch ms, sin contenido: correo (Gmail) → publicado (Pub/Sub) →
+            # llegada (backend) → guardado (movimiento) → fcm (aceptado). El teléfono registra el resto.
+            published, arrived = PUBSUB_TIMES.get() or (None, None)
+            log.info(
+                "tramos correo=%d publicado=%s llegada=%s guardado=%d fcm=%d tipo=%s",
+                received_ms,
+                published,
+                arrived,
+                saved_ms,
+                _now_ms(),
+                kind,
+            )
     return count
 
 
