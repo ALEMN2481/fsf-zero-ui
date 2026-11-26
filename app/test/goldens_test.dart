@@ -1,4 +1,4 @@
-/// Capturas de las pantallas 1–6 (Paso 12) con golden tests y la fuente real (Roboto).
+/// Capturas de las pantallas (Pasos 12, 12B y 13) con golden tests y la fuente real (Roboto).
 ///
 /// Datos: respuestas reales del backend local para la cuenta demo, sembrada con el conjunto del
 /// supervisor (test/goldens/data). Generar o actualizar:
@@ -14,7 +14,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fsf_app/api.dart';
 import 'package:fsf_app/auth_screen.dart';
+import 'package:fsf_app/coach_screen.dart';
 import 'package:fsf_app/data_sources_screen.dart';
 import 'package:fsf_app/home_screen.dart';
 import 'package:fsf_app/launch_screen.dart';
@@ -54,7 +56,7 @@ Future<void> loadFonts() async {
   await (FontLoader('MaterialIcons')..addFont(bytes('materialicons-regular.otf'))).load();
 }
 
-final demo = load('demo'), over = load('demo_over');
+final demo = load('demo'), over = load('demo_over'), coach = load('coach');
 final now = DateTime.utc(2026, 11, 25, 22); // 17:00 en Colombia, como cuando se tomaron los datos
 
 FakeBackend backend({Object? gps, Object? movements, String gmail = 'active'}) => FakeBackend({
@@ -64,6 +66,7 @@ FakeBackend backend({Object? gps, Object? movements, String gmail = 'active'}) =
   'GET /categories': (_) => demo['categories'],
   'GET /budgets/suggestion': (_) => demo['suggestion'],
   'GET /pockets': (_) => demo['pockets'],
+  'GET /coach/messages': (_) => coach['messages'],
 });
 
 Future<void> shoot(WidgetTester tester, FakeBackend b, String name, {double scale = 1, bool tutorial = false}) async {
@@ -188,5 +191,22 @@ void main() {
   testWidgets('10 · Fuentes de Datos', (tester) async {
     await shootWidget(tester, DataSourcesScreen(status: () async => null, connect: () async {}));
     await golden(tester, '10_fuentes_de_datos');
+  });
+
+  // Paso 13: respuestas reales del backend local con Ollama (qwen2.5:3b) para la cuenta demo.
+  testWidgets('11 · Coach', (tester) async {
+    await shootWidget(tester, CoachScreen(api: Api(backend().client, 'demo'), now: () => now));
+    await golden(tester, '11_coach');
+  });
+
+  testWidgets('11b · Coach con el texto al 200 %', (tester) async {
+    await shootWidget(tester, CoachScreen(api: Api(backend().client, 'demo'), now: () => now), scale: 2);
+    await golden(tester, '11b_coach_texto_200');
+  });
+
+  testWidgets('12 · Coach sin mensajes', (tester) async {
+    final b = FakeBackend({'GET /coach/messages': (_) => const []});
+    await shootWidget(tester, CoachScreen(api: Api(b.client, 'demo'), now: () => now));
+    await golden(tester, '12_coach_vacio');
   });
 }

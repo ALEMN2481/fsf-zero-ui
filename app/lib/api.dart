@@ -8,6 +8,9 @@ const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:
 /// La primera llamada puede tardar más (el backend descarga el JWKS para validar el token).
 const apiTimeout = Duration(seconds: 10);
 
+/// El Coach espera al LLM local: con el modelo fuera de memoria tarda unos 12 s (Paso 13).
+const coachTimeout = Duration(seconds: 45);
+
 /// Respuesta de error del backend: [detail] es el texto o el objeto `detail` de FastAPI.
 class ApiError implements Exception {
   ApiError(this.status, this.detail);
@@ -32,14 +35,18 @@ class Api {
 
   Future<dynamic> get(String path) => _send(client.get(Uri.parse('$apiUrl$path'), headers: _headers));
 
-  Future<dynamic> post(String path, [Object? body]) =>
-      _send(client.post(Uri.parse('$apiUrl$path'), headers: _headers, body: body == null ? null : jsonEncode(body)));
+  Future<dynamic> post(String path, [Object? body, Duration timeout = apiTimeout]) => _send(
+    client.post(Uri.parse('$apiUrl$path'), headers: _headers, body: body == null ? null : jsonEncode(body)),
+    timeout,
+  );
+
+  Future<dynamic> delete(String path) => _send(client.delete(Uri.parse('$apiUrl$path'), headers: _headers));
 
   Future<dynamic> patch(String path, Object body) =>
       _send(client.patch(Uri.parse('$apiUrl$path'), headers: _headers, body: jsonEncode(body)));
 
-  Future<dynamic> _send(Future<http.Response> request) async {
-    final res = await request.timeout(apiTimeout);
+  Future<dynamic> _send(Future<http.Response> request, [Duration timeout = apiTimeout]) async {
+    final res = await request.timeout(timeout);
     final body = res.body.isEmpty ? null : jsonDecode(utf8.decode(res.bodyBytes));
     if (res.statusCode >= 300) throw ApiError(res.statusCode, body is Map ? body['detail'] : body);
     return body;

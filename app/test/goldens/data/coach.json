@@ -1,0 +1,120 @@
+{
+ "messages": [
+  {
+   "rol": "user",
+   "partes": [
+    {
+     "texto": "¿Cuánto puedo gastar hoy?",
+     "cifra": false
+    }
+   ],
+   "creado": "2026-11-26T01:19:55.49858+00:00"
+  },
+  {
+   "rol": "assistant",
+   "partes": [
+    {
+     "texto": "Hoy puedes gastar ",
+     "cifra": false
+    },
+    {
+     "texto": "$ 355.291",
+     "cifra": true
+    },
+    {
+     "texto": " sin salirte de tu plan.",
+     "cifra": false
+    }
+   ],
+   "creado": "2026-11-26T01:20:04.100356+00:00"
+  },
+  {
+   "rol": "user",
+   "partes": [
+    {
+     "texto": "¿En qué gasté más esta semana?",
+     "cifra": false
+    }
+   ],
+   "creado": "2026-11-26T01:20:04.788103+00:00"
+  },
+  {
+   "rol": "assistant",
+   "partes": [
+    {
+     "texto": "Esta semana donde más gastaste fue ",
+     "cifra": false
+    },
+    {
+     "texto": "Otros",
+     "cifra": false
+    },
+    {
+     "texto": ", con ",
+     "cifra": false
+    },
+    {
+     "texto": "$ 107.800",
+     "cifra": true
+    },
+    {
+     "texto": ".",
+     "cifra": false
+    }
+   ],
+   "creado": "2026-11-26T01:20:08.264632+00:00"
+  },
+  {
+   "rol": "user",
+   "partes": [
+    {
+     "texto": "¿Qué pasa si gasto $20.000 más hoy?",
+     "cifra": false
+    }
+   ],
+   "creado": "2026-11-26T01:20:08.959854+00:00"
+  },
+  {
+   "rol": "assistant",
+   "partes": [
+    {
+     "texto": "Si gastes ",
+     "cifra": false
+    },
+    {
+     "texto": "$ 20.000",
+     "cifra": true
+    },
+    {
+     "texto": " más hoy, tu saldo para hoy quedaría en ",
+     "cifra": false
+    },
+    {
+     "texto": "$ 335.291",
+     "cifra": true
+    },
+    {
+     "texto": ". Desde mañana tu diario quedaría en ",
+     "cifra": false
+    },
+    {
+     "texto": "$ 376.450",
+     "cifra": true
+    },
+    {
+     "texto": ". Tu saldo libre en el mes quedaría en ",
+     "cifra": false
+    },
+    {
+     "texto": "$ 1.882.250",
+     "cifra": true
+    },
+    {
+     "texto": ".",
+     "cifra": false
+    }
+   ],
+   "creado": "2026-11-26T01:20:13.204528+00:00"
+  }
+ ]
+}

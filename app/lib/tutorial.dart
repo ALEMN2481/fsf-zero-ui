@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'coach_screen.dart' show CoachAvatar;
 import 'home_screen.dart' show ReservedCard;
 import 'money.dart';
 import 'theme.dart';
 
 /// «Primer vistazo» (D14): se muestra una vez sobre la principal. Usa las cifras reales del
-/// backend; sin «Obligaciones» (el motor no las calcula) ni el Coach (Paso 13).
+/// backend; sin «Obligaciones» (el motor no las calcula). El último globo señala el botón del Coach.
 class TutorialOverlay extends StatelessWidget {
   const TutorialOverlay({super.key, required this.gps, required this.onDone});
 
@@ -30,7 +31,7 @@ class TutorialOverlay extends StatelessWidget {
                 TextButton(onPressed: onDone, child: const Text('Omitir tutorial')),
               ],
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
@@ -49,7 +50,16 @@ class TutorialOverlay extends StatelessWidget {
               arrowUp: true,
               text: 'Reservado es lo que apartaste en tus bolsillos: no cuenta como dinero libre.',
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
+            const _Bubble(
+              arrowDown: true,
+              text: 'Toca este botón para hablar con tu Coach: te explica tus cifras en palabras simples.',
+            ),
+            const Align(
+              alignment: Alignment.centerRight,
+              child: ExcludeSemantics(child: CoachAvatar(size: 60)),
+            ),
+            const SizedBox(height: 24),
             FilledButton(onPressed: onDone, child: const Text('Entendido')),
           ],
         ),
@@ -59,10 +69,10 @@ class TutorialOverlay extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.text, this.arrowUp = false});
+  const _Bubble({required this.text, this.arrowUp = false, this.arrowDown = false});
 
   final String text;
-  final bool arrowUp;
+  final bool arrowUp, arrowDown;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -79,6 +89,17 @@ class _Bubble extends StatelessWidget {
         decoration: const BoxDecoration(color: Fsf.globo, borderRadius: BorderRadius.all(Radius.circular(24))),
         child: Text(text, style: const TextStyle(color: Fsf.sobrePrimario, fontSize: 16, height: 1.5)),
       ),
+      if (arrowDown)
+        const Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: EdgeInsets.only(right: 18, bottom: 4),
+            child: RotatedBox(
+              quarterTurns: 2,
+              child: CustomPaint(size: Size(24, 14), painter: _Arrow()),
+            ),
+          ),
+        ),
     ],
   );
 }

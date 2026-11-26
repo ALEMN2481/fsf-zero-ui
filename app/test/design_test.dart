@@ -35,7 +35,7 @@ Future<void> accessible(WidgetTester tester) async {
 
 void main() {
   group('tutorial «Primer vistazo»', () {
-    testWidgets('se muestra con las cifras reales, sin Obligaciones ni Coach, y se cierra', (tester) async {
+    testWidgets('se muestra con las cifras reales, sin Obligaciones, señala el Coach y se cierra', (tester) async {
       phone(tester);
       var done = 0;
       await tester.pumpWidget(
@@ -54,9 +54,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(TutorialOverlay), findsOneWidget);
       expect(find.textContaining('Reservado es lo que apartaste'), findsOneWidget);
-      for (final banned in ['Obligaciones', 'Coach', 'obligaciones']) {
+      for (final banned in ['Obligaciones', 'obligaciones']) {
         expect(find.textContaining(banned), findsNothing, reason: banned);
       }
+      expect(find.textContaining('hablar con tu Coach'), findsOneWidget); // Paso 13
+      final scroll = find.descendant(of: find.byType(TutorialOverlay), matching: find.byType(Scrollable));
+      await tester.scrollUntilVisible(find.text('Entendido'), 200, scrollable: scroll.first);
       await tester.tap(find.text('Entendido'));
       expect(done, 1);
     });

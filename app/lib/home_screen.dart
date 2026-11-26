@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'api.dart';
 import 'auth_screen.dart' show openInBrowser;
 import 'budget_form.dart';
+import 'coach_screen.dart';
 import 'data_sources_screen.dart';
 import 'money.dart';
 import 'movements.dart';
@@ -165,6 +166,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     ),
   );
 
+  void _openCoach() => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => CoachScreen(api: api, now: widget.now),
+    ),
+  );
+
   void _openMovement(Map<String, dynamic> m) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -205,10 +212,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
+      floatingActionButton: _loading || _failed
+          ? null
+          : FloatingActionButton(
+              tooltip: 'Abrir el Coach',
+              shape: const CircleBorder(),
+              onPressed: _openCoach,
+              child: const Icon(Icons.auto_awesome),
+            ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, Fsf.margen),
+          // Abajo, espacio para que el botón del Coach no tape el último movimiento.
+          padding: const EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, 96),
           children: _body(context),
         ),
       ),
