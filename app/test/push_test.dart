@@ -20,7 +20,7 @@ class FakePush implements Push {
   bool granted, grantOnRequest;
   final refresh = StreamController<String>.broadcast();
   final messages = StreamController<Map<String, String>>.broadcast();
-  int requests = 0, settingsOpened = 0, deleted = 0;
+  int requests = 0, settingsOpened = 0, lockScreenOpened = 0, deleted = 0;
 
   @override
   Future<String?> token() async => 'tok-1';
@@ -38,6 +38,8 @@ class FakePush implements Push {
 
   @override
   Future<void> openSettings() async => settingsOpened++;
+  @override
+  Future<void> openLockScreenSettings() async => lockScreenOpened++;
   @override
   Future<void> deleteToken() async => deleted++;
 }
@@ -123,7 +125,7 @@ void main() {
     // Al cerrarlo, sí.
     await pumpHome(tester, b, push, askPush: true, onPushAsked: () => asked++);
     expect(find.byType(PushPrompt), findsOneWidget);
-    expect(find.textContaining('En la pantalla de bloqueo no se ven cifras'), findsOneWidget);
+    expect(find.textContaining('puedes ocultarlas'), findsOneWidget);
     await tester.tap(find.text('Activar avisos'));
     await tester.pumpAndSettle();
     expect((push.requests, asked), (1, 1));
@@ -197,15 +199,21 @@ void main() {
       expect((push.requests, push.settingsOpened), (1, 1));
     });
 
-    testWidgets('activados: lo dice y no muestra botón', (tester) async {
-      await pump(tester, FakePush(granted: true));
+    testWidgets('activados: lo dice y explica cómo ocultar las cifras en la pantalla de bloqueo', (tester) async {
+      final push = FakePush(granted: true);
+      await pump(tester, push);
       expect(find.textContaining('Activados'), findsOneWidget);
       expect(find.text('Activar avisos'), findsNothing);
+      await tester.tap(find.text('Ocultar cifras en la pantalla de bloqueo'));
+      await tester.pumpAndSettle();
+      expect(push.lockScreenOpened, 1);
     });
 
     testWidgets('al 200 % no desborda y cumple las guías (Fuentes y la explicación)', (tester) async {
       phone(tester);
       await pump(tester, FakePush(), scale: 2);
+      await accessible(tester);
+      await pump(tester, FakePush(granted: true), scale: 2);
       await accessible(tester);
       await tester.pumpWidget(wrap(const Scaffold(body: PushPrompt()), scale: 2));
       await tester.pumpAndSettle();

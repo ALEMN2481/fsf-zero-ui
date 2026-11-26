@@ -461,7 +461,8 @@ class PushPrompt extends StatelessWidget {
           const SizedBox(height: 12),
           const Text(
             'Te avisamos cuando registremos un gasto o haya algo por confirmar. '
-            'En la pantalla de bloqueo no se ven cifras.',
+            'Si no quieres que se vean cifras con el teléfono bloqueado, puedes ocultarlas '
+            'desde Fuentes de Datos.',
             style: TextStyle(fontSize: 16, height: 1.5),
           ),
           const SizedBox(height: 24),

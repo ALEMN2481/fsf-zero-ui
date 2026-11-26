@@ -95,7 +95,11 @@ class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindi
             const SizedBox(height: 16),
             FutureBuilder<bool>(
               future: _push,
-              builder: (context, snap) => _PushCard(enabled: snap.data, onEnable: _enablePush),
+              builder: (context, snap) => _PushCard(
+                enabled: snap.data,
+                onEnable: _enablePush,
+                onLockScreen: widget.push!.openLockScreenSettings,
+              ),
             ),
           ],
           const SizedBox(height: 48),
@@ -157,10 +161,10 @@ class _GmailCard extends StatelessWidget {
 }
 
 class _PushCard extends StatelessWidget {
-  const _PushCard({required this.enabled, required this.onEnable});
+  const _PushCard({required this.enabled, required this.onEnable, required this.onLockScreen});
 
   final bool? enabled; // null: comprobando
-  final VoidCallback onEnable;
+  final VoidCallback onEnable, onLockScreen;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -181,7 +185,12 @@ class _PushCard extends StatelessWidget {
         Text(
           switch (enabled) {
             null => 'Comprobando…',
-            true => 'Activados. Te avisamos de tus gastos; en la pantalla de bloqueo no se ven cifras.',
+            // D16: Android muestra el contenido en la pantalla de bloqueo salvo que el usuario oculte
+            // el contenido sensible; la app no puede imponerlo.
+            true =>
+              'Activados. Te avisamos de tus gastos con el monto y lo que puedes gastar hoy. '
+                  'Si no quieres que esas cifras se vean con el teléfono bloqueado, oculta el '
+                  'contenido sensible en los ajustes de notificaciones.',
             false => 'Desactivados. Actívalos para saber cuándo registramos un gasto.',
           },
           key: const Key('avisos_estado'),
@@ -190,6 +199,10 @@ class _PushCard extends StatelessWidget {
         if (enabled == false) ...[
           const SizedBox(height: 16),
           FilledButton(onPressed: onEnable, child: const Text('Activar avisos')),
+        ],
+        if (enabled == true) ...[
+          const SizedBox(height: 16),
+          OutlinedButton(onPressed: onLockScreen, child: const Text('Ocultar cifras en la pantalla de bloqueo')),
         ],
       ],
     ),

@@ -15,6 +15,9 @@ abstract class Push {
   /// Android 13+: diálogo del sistema (POST_NOTIFICATIONS). Devuelve si quedaron activados.
   Future<bool> requestPermission();
   Future<void> openSettings();
+
+  /// Ajustes de notificaciones de Android, donde se ocultan las cifras en la pantalla de bloqueo (D16).
+  Future<void> openLockScreenSettings();
   Future<void> deleteToken();
 }
 
@@ -46,6 +49,9 @@ class FirebasePush implements Push {
 
   @override
   Future<void> openSettings() => _settings.invokeMethod('abrirAjustes');
+
+  @override
+  Future<void> openLockScreenSettings() => _settings.invokeMethod('abrirAjustesBloqueo');
 
   @override
   Future<void> deleteToken() => _fcm.deleteToken();

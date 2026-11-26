@@ -1,5 +1,6 @@
 package co.finanzassinfiltro.fsf_app
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
@@ -25,15 +26,27 @@ class MainActivity : FlutterFragmentActivity() {
         // «Avisos» en Fuentes de Datos: si el usuario negó el permiso, Android ya no lo vuelve a
         // preguntar; se abren los ajustes de notificaciones de la app (Paso 14).
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "fsf/avisos").setMethodCallHandler { call, result ->
-            if (call.method == "abrirAjustes") {
-                startActivity(
-                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-                result.success(null)
-            } else {
-                result.notImplemented()
+            when (call.method) {
+                "abrirAjustes" -> {
+                    startActivity(
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    result.success(null)
+                }
+                // D16: ocultar el contenido sensible está en Ajustes › Notificaciones › «Notificaciones
+                // en la pantalla de bloqueo». La acción no es pública en el SDK; si un fabricante no
+                // la tiene, se abren los Ajustes generales.
+                "abrirAjustesBloqueo" -> {
+                    try {
+                        startActivity(Intent("android.settings.NOTIFICATION_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (e: ActivityNotFoundException) {
+                        startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
             }
         }
     }
