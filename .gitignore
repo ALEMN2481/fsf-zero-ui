@@ -19,3 +19,6 @@ build/
 .idea/
 .vscode/
 *.log
+
+# Firebase (Paso 14, D16): la configuración de la app Android queda fuera del repo.
+app/android/app/google-services.json
