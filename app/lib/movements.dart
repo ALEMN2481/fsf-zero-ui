@@ -154,13 +154,18 @@ class _MovementSheetState extends State<MovementSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (pending)
-              const Align(
+            // Como en «Categorizar gasto» de Figma: por confirmar, o categoría que no se supo (Paso 14).
+            if (pending || m['preguntar_categoria'] == true)
+              Align(
                 alignment: Alignment.centerLeft,
                 child: CircleAvatar(
                   radius: 20,
                   backgroundColor: Fsf.superficie,
-                  child: Icon(Icons.error_outline, color: Fsf.texto, semanticLabel: 'Por confirmar'),
+                  child: Icon(
+                    Icons.error_outline,
+                    color: Fsf.texto,
+                    semanticLabel: pending ? 'Por confirmar' : 'Categoría por elegir',
+                  ),
                 ),
               ),
             const SizedBox(height: 16),

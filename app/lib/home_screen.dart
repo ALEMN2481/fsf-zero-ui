@@ -76,7 +76,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   StreamSubscription<void>? _changeSub;
   final _pushSubs = <StreamSubscription<Object?>>[];
   String? _pushToken;
-  bool _askingPush = false;
+  bool _askingPush = false, _sheetOpen = false;
+  final _askedCategory = <String>{};
 
   @override
   void initState() {
@@ -94,17 +95,66 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (push == null) return;
     _pushSubs
       ..add(push.tokenRefresh.listen(_registerDevice))
-      ..add(
-        push.foreground.listen((data) {
-          _load();
-          if (mounted && data['title'] != null) _say(data['title']!);
-        }),
-      );
+      ..add(push.foreground.listen(_onForegroundNotice));
     try {
       final token = await push.token();
       if (token != null) await _registerDevice(token);
     } catch (_) {
       // Sin Google Play o sin red: la app funciona igual, sin avisos.
+    }
+  }
+
+  /// Aviso con la app abierta: refresca y lo dice con un mensaje que, al tocarlo, abre lo mismo que
+  /// el aviso del sistema. Si pregunta la categoría, la hoja aparece sola.
+  void _onForegroundNotice(Map<String, String> data) {
+    _load();
+    if (!mounted) return;
+    final id = data['transaction_id'], title = data['title'];
+    if (data['tipo'] == 'categorizar' && id != null) {
+      _askedCategory.add(id);
+      _openMovementById(id);
+      return;
+    }
+    if (title == null) return;
+    final open = id != null ? () => _openMovementById(id) : (data['tipo'] == 'reconectar_gmail' ? _openSources : null);
+    _notice(title, onTap: open);
+  }
+
+  void _notice(String text, {VoidCallback? onTap}) {
+    final messenger = ScaffoldMessenger.of(context);
+    void tap() {
+      messenger.hideCurrentSnackBar();
+      onTap!();
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap == null ? null : tap,
+          child: Row(
+            children: [
+              const Icon(Icons.notifications_none, color: Fsf.sobrePrimario),
+              const SizedBox(width: 12),
+              Expanded(child: Text(text)),
+            ],
+          ),
+        ),
+        action: onTap == null ? null : SnackBarAction(label: 'Ver', onPressed: onTap),
+      ),
+    );
+  }
+
+  /// Ni las reglas ni el LLM supieron la categoría de un gasto: al abrir la app, la hoja aparece sola
+  /// (una vez por movimiento en cada sesión; deja de pedirse al elegirla).
+  void _maybeAskCategory() {
+    if (widget.showTutorial || widget.askPush || _sheetOpen) return;
+    for (final m in _movements) {
+      final id = m['id'] as String;
+      if (m['preguntar_categoria'] == true && _askedCategory.add(id)) {
+        _openMovement(m);
+        return;
+      }
     }
   }
 
@@ -195,6 +245,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _loading = false;
       });
       _maybeAskPush();
+      _maybeAskCategory();
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -273,11 +324,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _openMovement(Map<String, dynamic> m) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => MovementSheet(api: api, movement: m, now: widget.now(), onChanged: _load),
-  );
+  Future<void> _openMovement(Map<String, dynamic> m) async {
+    _sheetOpen = true;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => MovementSheet(api: api, movement: m, now: widget.now(), onChanged: _load),
+    );
+    _sheetOpen = false;
+  }
 
   @override
   Widget build(BuildContext context) {

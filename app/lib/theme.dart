@@ -144,6 +144,20 @@ ThemeData fsfTheme() {
       color: Fsf.fondo,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
     ),
-    snackBarTheme: const SnackBarThemeData(backgroundColor: Fsf.primario, behavior: SnackBarBehavior.floating),
+    // Mensajes breves y avisos con la app abierta (Paso 14): negro, texto blanco, esquinas de tarjeta.
+    snackBarTheme: const SnackBarThemeData(
+      backgroundColor: Fsf.primario,
+      behavior: SnackBarBehavior.floating,
+      elevation: 0,
+      insetPadding: EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+      contentTextStyle: TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+        fontSize: 15,
+        color: Fsf.sobrePrimario,
+      ),
+      actionTextColor: Fsf.sobrePrimario,
+    ),
   );
 }

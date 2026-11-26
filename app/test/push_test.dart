@@ -101,6 +101,66 @@ void main() {
     expect(find.text('Nuevo gasto registrado'), findsOneWidget);
   });
 
+  testWidgets('con la app abierta, tocar el mensaje del aviso abre la hoja del movimiento', (tester) async {
+    final b = pushBackend(), push = FakePush();
+    await pumpHome(tester, b, push);
+    push.messages.add({'tipo': 'gasto_registrado', 'title': 'Nuevo gasto registrado', 'transaction_id': 't2'});
+    await tester.pumpAndSettle();
+    final bar = tester.widget<SnackBar>(find.byType(SnackBar));
+    expect(bar.action?.label, 'Ver'); // también con lector de pantalla
+    await tester.tap(find.text('Nuevo gasto registrado'));
+    await tester.pumpAndSettle();
+    expect(b.count('GET /transactions/t2'), 1);
+    expect(find.byType(MovementSheet), findsOneWidget);
+  });
+
+  group('categoría que no se sabe', () {
+    List<Map<String, dynamic>> asking() => [
+      for (final m in movements) {...m, 'preguntar_categoria': m['id'] == 't3'},
+    ];
+
+    testWidgets('al abrir la app, la hoja de categorías aparece sola y una vez por sesión', (tester) async {
+      final b = pushBackend();
+      b.routes['GET /movements'] = (_) => asking();
+      await pumpHome(tester, b, FakePush());
+      expect(find.byType(MovementSheet), findsOneWidget);
+      expect(find.text('¿A qué categoría pertenece este gasto?'), findsOneWidget);
+      expect(find.textContaining('RESTAURANTE EJEMPLO SAS'), findsWidgets);
+      Navigator.of(tester.element(find.byType(MovementSheet))).pop();
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).first, const Offset(0, 400)); // refrescar
+      await tester.pumpAndSettle();
+      expect(find.byType(MovementSheet), findsNothing);
+    });
+
+    testWidgets('al elegir, se guarda la categoría (y con ella la regla del comercio)', (tester) async {
+      final b = pushBackend();
+      b.routes['GET /movements'] = (_) => asking();
+      b.routes['PATCH /transactions/t3/category'] = (_) => {'id': 't3'};
+      await pumpHome(tester, b, FakePush());
+      await tester.tap(find.text('Transporte'));
+      await tester.pumpAndSettle();
+      expect(b.body('PATCH /transactions/t3/category'), {'category_id': 'c-tra'});
+    });
+
+    testWidgets('no interrumpe el tutorial', (tester) async {
+      final b = pushBackend();
+      b.routes['GET /movements'] = (_) => asking();
+      await pumpHome(tester, b, FakePush(), showTutorial: true);
+      expect(find.byType(MovementSheet), findsNothing);
+    });
+
+    testWidgets('con la app abierta, el aviso de categoría abre la hoja sin tocar nada', (tester) async {
+      final b = pushBackend(), push = FakePush();
+      b.routes['GET /transactions/t3'] = (_) => movements[2];
+      await pumpHome(tester, b, push);
+      push.messages.add({'tipo': 'categorizar', 'title': '¿En qué categoría va este gasto?', 'transaction_id': 't3'});
+      await tester.pumpAndSettle();
+      expect(find.byType(MovementSheet), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+  });
+
   testWidgets('tocar el aviso abre la hoja del movimiento; el de Gmail, Fuentes de Datos', (tester) async {
     final b = pushBackend(), links = StreamController<Uri>();
     await pumpHome(tester, b, FakePush(), links: links);

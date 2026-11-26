@@ -23,6 +23,7 @@ import 'package:fsf_app/launch_screen.dart';
 import 'package:fsf_app/theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show GoTrueClient;
 
+import 'push_test.dart' show FakePush;
 import 'support.dart';
 
 Map<String, dynamic> load(String name) =>
@@ -208,5 +209,35 @@ void main() {
     final b = FakeBackend({'GET /coach/messages': (_) => const []});
     await shootWidget(tester, CoachScreen(api: Api(b.client, 'demo'), now: () => now));
     await golden(tester, '12_coach_vacio');
+  });
+
+  // Paso 14 (ajustes): aviso con la app abierta y pregunta de categoría.
+  testWidgets('13 · aviso con la app abierta', (tester) async {
+    final push = FakePush();
+    final b = backend();
+    await shootWidget(
+      tester,
+      HomeScreen(
+        client: b.client,
+        token: 'demo',
+        onSignOut: () {},
+        links: const Stream.empty(),
+        now: () => now,
+        push: push,
+      ),
+    );
+    final id = (demo['movements'] as List).first['id'] as String;
+    push.messages.add({'tipo': 'gasto_registrado', 'title': 'Nuevo gasto registrado', 'transaction_id': id});
+    await tester.pumpAndSettle();
+    await golden(tester, '13_aviso_app_abierta');
+  });
+
+  testWidgets('14 · categoría que no se sabe (la hoja aparece sola)', (tester) async {
+    final movements = [
+      for (final m in (demo['movements'] as List).cast<Map<String, dynamic>>())
+        {...m, 'preguntar_categoria': m['comercio'] == 'TIENDA DE BARRIO EJEMPLO'},
+    ];
+    await shoot(tester, backend(movements: movements), '14');
+    await golden(tester, '14_pregunta_categoria');
   });
 }
