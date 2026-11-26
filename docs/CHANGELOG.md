@@ -10,6 +10,13 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-26 · Antes del Paso 15 — D17 (expo), aislamiento de tests y revocación de Gmail
+- RQ: RQN 01, RQF 02, RQF 03. Decisión **D17**: entrega en una expo con todo en el PC del supervisor y el camino real (sin modo demo); el Paso 16 pasa a «Kit de la expo» y lo de producción queda como trabajo futuro en el ROADMAP.
+- Cambios: `categorize.backfill(user_ids)` y su test (un movimiento de otro usuario queda intacto; falla si el backfill es global); `gmail.disconnect` devuelve si Google confirmó la revocación (200 o `invalid_token`) y `POST /gmail/disconnect` → `{revocada}`; botón «Desconectar Gmail» en Fuentes de Datos con confirmación y el aviso «No pudimos confirmar la revocación; revísala en tu cuenta de Google».
+- Verificación: `pytest` → **455 passed** (Supabase local); `flutter test` → **109 passed**; `flutter analyze` sin problemas.
+- Riesgo: la comprobación por mutación del aislamiento ejecutó una vez el backfill global (con el LLM simulado respondiendo «Otros») sobre la base local.
+- Siguiente: plan del Paso 15.
+
 ## 2026-11-26 · Paso 14 — Avisos push con FCM (D16)
 - RQ: RQF 02, RQF 03, RQN 04, RQN 01, RQN 05. Decisión D16 (con sus ajustes del 2026-11-26).
 - Cambios (db): `device_tokens` (solo escribe el backend, RLS de lectura), `transactions.notified_at` (un aviso por movimiento) y `transactions.category_asked_at` (una pregunta de categoría por gasto). pgTAP: 85.
