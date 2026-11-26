@@ -35,6 +35,14 @@ aparecen las dos herramientas; prueba `extract_bank_alert` con, por ejemplo,
 Para el respaldo con LLM hace falta Ollama en marcha con `qwen2.5:3b` (`ollama pull qwen2.5:3b`);
 la primera llamada con el modelo fuera de memoria tarda ~12–14 s.
 
+## Avisos push (Firebase, Paso 14)
+
+- App: descargar `google-services.json` de la consola de Firebase (app Android
+  `co.finanzassinfiltro.fsf_app`) y dejarlo en `app/android/app/`. **No se versiona** (está en
+  `.gitignore`); `google-services.json.example` muestra su forma. Sin él la app no compila para Android.
+- Backend: `FCM_CREDENTIALS_FILE` (ruta absoluta a la clave JSON de la cuenta de servicio, fuera del
+  repo; es un secreto) y `FCM_PROJECT_ID` en `backend/.env` (ver `backend/.env.example`).
+
 ## Créditos de diseño
 - Tipografías **Inter** (The Inter Project Authors) y **Unbounded** (The Unbounded Project Authors), con licencia SIL Open Font License 1.1: `app/assets/fonts/*/OFL.txt`.
 - Estilo visual adaptado de la plantilla «Invest App App design (Community)» de la Comunidad de Figma. *Licencia pendiente de revisar por el supervisor (ver ROADMAP); si exige atribución, se añadirá aquí.*
