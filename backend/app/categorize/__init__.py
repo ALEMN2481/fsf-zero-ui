@@ -12,11 +12,12 @@ import logging
 import re
 import threading
 import tomllib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 
-from app import service_db
+from app import push, service_db
 from app.config import settings
 from app.extract import llm
 from app.extract.bancolombia import _FOLD
@@ -99,8 +100,12 @@ def assign(
     return result(_global_id(name or OTHER), "regla" if name else "pendiente")
 
 
-def run_pending(user_id: str) -> int:
-    """Pasa por el LLM los movimientos del usuario en 'pendiente'. Devuelve cuántos actualizó."""
+def run_pending(user_id: str, ask: bool = False) -> int:
+    """Pasa por el LLM los movimientos del usuario en 'pendiente'. Devuelve cuántos actualizó.
+
+    [ask]: si el LLM tampoco la sabe (queda en Otros por descarte), se le pregunta al usuario con
+    un aviso, una vez por movimiento. Solo en la ingesta en vivo, nunca en el backfill.
+    """
     if not settings.ollama_url:
         return 0
     rows = _get(
@@ -108,7 +113,7 @@ def run_pending(user_id: str) -> int:
         {
             "user_id": f"eq.{user_id}",
             "category_source": "eq.pendiente",
-            "select": "id,merchant",
+            "select": "id,merchant,direction,status",
         },
     )
     if not rows:
@@ -134,6 +139,8 @@ def run_pending(user_id: str) -> int:
             # Siguen en Otros como 'pendiente': se reintentan en la próxima ejecución.
             log.warning("llm de categorías no disponible error=%s", type(e).__name__)
             break
+        if name == OTHER:
+            name = None  # elegir «Otros» tampoco es saberla: queda en Otros por descarte
         # Condición en la misma escritura: si el usuario corrigió mientras el LLM pensaba, no se toca.
         r = service_db.rest(
             "PATCH",
@@ -146,19 +153,41 @@ def run_pending(user_id: str) -> int:
             prefer="return=representation",
         )
         updated += len(r.json())
+        if ask and name is None and r.json():
+            _ask(user_id, row)
     log.info("categorías por llm user=%s actualizados=%d", user_id, updated)
     return updated
 
 
-def _run_quietly(user_id: str) -> None:
+def _run_quietly(user_id: str, ask: bool = False) -> None:
     try:
-        run_pending(user_id)
+        run_pending(user_id, ask)
     except Exception as e:  # noqa: BLE001 - hilo de fondo: un fallo solo deja el movimiento en 'pendiente'
         log.error(
             "falló la categorización con llm user=%s error=%s",
             user_id,
             type(e).__name__,
         )
+
+
+def _ask(user_id: str, row: dict) -> None:
+    """Pregunta la categoría de un gasto confirmado; se reclama con category_asked_at."""
+    if row["direction"] != "expense" or row["status"] != "confirmed":
+        return
+    claimed = service_db.rest(
+        "PATCH",
+        "transactions",
+        params={
+            "id": f"eq.{row['id']}",
+            "category_asked_at": "is.null",
+            "category_source": "eq.otros",
+            "select": "id",
+        },
+        json={"category_asked_at": datetime.now(UTC).isoformat()},
+        prefer="return=representation",
+    ).json()
+    if claimed:
+        push.ask_category(user_id, row["id"])
 
 
 def schedule(user_id: str) -> None:
@@ -168,7 +197,7 @@ def schedule(user_id: str) -> None:
     'pendiente' lo recoge el backfill. Con varias instancias, una cola de trabajos (Paso 16).
     """
     if settings.ollama_url:
-        threading.Thread(target=_run_quietly, args=(user_id,), daemon=True).start()
+        threading.Thread(target=_run_quietly, args=(user_id, True), daemon=True).start()
 
 
 def backfill() -> dict[str, int]:

@@ -32,6 +32,7 @@ log = logging.getLogger("fsf.push")
 
 SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 SPENT, REVIEW, RECONNECT = "gasto_registrado", "por_confirmar", "reconectar_gmail"
+CATEGORY = "categorizar"
 
 # ---------------------------------------------------------------- textos (sin comercio)
 
@@ -51,6 +52,20 @@ def spent_message(amount: Decimal, state: dict) -> dict:
     }
 
 
+def cash_invoice_message(amount: Decimal) -> dict:
+    """Factura en efectivo: no baja lo de hoy (ya se contó con el retiro en cajero, D12)."""
+    return {
+        "title": "Nuevo gasto registrado",
+        "body": f"Registramos tu factura de {cop(amount)} en efectivo. Ya estaba contada en tu retiro.",
+        "public_title": "Nuevo gasto registrado",
+    }
+
+
+CATEGORY_MESSAGE = {
+    "title": "¿En qué categoría va este gasto?",
+    "body": "No pudimos saberlo. Toca para elegirla.",
+    "public_title": "¿En qué categoría va este gasto?",
+}
 REVIEW_MESSAGE = {
     "title": "Detectamos un gasto",
     "body": "Necesitamos que lo confirmes. Toca para revisarlo.",
@@ -250,7 +265,7 @@ def new_movements(
             "notified_at": "is.null",
             "direction": "eq.expense",  # sin avisos de ingresos ni devoluciones
             "status": "in.(confirmed,pending_review)",
-            "select": "id,amount::text,status,to_last4",
+            "select": "id,amount::text,status,to_last4,counts_in_budget",
             "order": "created_at",
         },
     ).json()
@@ -266,7 +281,7 @@ def new_movements(
     with ThreadPoolExecutor(2) as pool:
         tokens = pool.submit(_device_tokens, user_id)
         state = None
-        if any(r["status"] == "confirmed" for r in rows):
+        if any(r["status"] == "confirmed" and r["counts_in_budget"] for r in rows):
             state = pool.submit(lambda: gps.summary(*_load(rest, _today(), own)))
         tokens, state = tokens.result(), state and state.result()
     count = 0
@@ -287,6 +302,8 @@ def new_movements(
             )
         if row["status"] == "pending_review":
             message, kind = REVIEW_MESSAGE, REVIEW
+        elif not row["counts_in_budget"]:  # factura en efectivo
+            message, kind = cash_invoice_message(Decimal(row["amount"])), SPENT
         else:
             message, kind = spent_message(Decimal(row["amount"]), state), SPENT
         count += send(user_id, kind, message, extra, post, tokens)
@@ -296,6 +313,13 @@ def new_movements(
 def _load(rest, today, own=None):
     budget, movements, pockets = engine_store.load(rest, today, own)
     return budget, today, movements, pockets
+
+
+def ask_category(user_id: str, tx_id: str, post: Sender | None = None) -> int:
+    """Ni las reglas ni el LLM supieron la categoría: se le pregunta al usuario (sin cifras).
+
+    Usa el mismo enlace que el aviso del gasto, así que en el teléfono lo reemplaza."""
+    return send(user_id, CATEGORY, CATEGORY_MESSAGE, {"transaction_id": tx_id}, post)
 
 
 def gmail_disconnected(user_id: str, post: Sender | None = None) -> int:

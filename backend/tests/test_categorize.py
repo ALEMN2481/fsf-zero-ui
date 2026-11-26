@@ -133,8 +133,12 @@ def test_llm_invalid_answer_is_none(monkeypatch, answer):
 
 def test_schedule_runs_in_background_only_with_llm(monkeypatch):
     real = REAL_SCHEDULE
-    done = threading.Event()
-    monkeypatch.setattr(categorize, "run_pending", lambda user_id: done.set())
+    done, asks = threading.Event(), []
+    monkeypatch.setattr(
+        categorize,
+        "run_pending",
+        lambda user_id, ask=False: asks.append(ask) or done.set(),
+    )
 
     real("u")
     assert not done.wait(0.2)  # sin LLM configurado no se lanza nada
@@ -142,3 +146,6 @@ def test_schedule_runs_in_background_only_with_llm(monkeypatch):
     monkeypatch.setattr(settings, "ollama_url", "http://ollama.test")
     real("u")
     assert done.wait(2)
+    assert asks == [
+        True
+    ]  # en la ingesta en vivo sí se pregunta la categoría si no se sabe

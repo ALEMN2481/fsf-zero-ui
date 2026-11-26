@@ -12,9 +12,10 @@ from fastapi.testclient import TestClient
 from local_supabase import bearer, requires_local
 from test_extract_store import alert_email, svc
 
-from app import gmail, push
+from app import categorize, gmail, push
 from app.coach import cop
 from app.config import settings
+from app.extract import llm
 from app.extract.bancolombia import COLOMBIA
 from app.ingest.store import ingest
 from app.main import app
@@ -51,8 +52,16 @@ def test_spent_message_has_engine_figures_and_no_merchant():
     ] == ("Registramos $ 45.900.")
 
 
+def test_cash_invoice_message_does_not_offer_what_is_left_today():
+    m = push.cash_invoice_message(Decimal(15800))
+    assert m["body"] == (
+        f"Registramos tu factura de {cop(Decimal(15800))} en efectivo. Ya estaba contada en tu retiro."
+    )
+    assert "puedes gastar" not in m["body"] and m["public_title"] == m["title"]
+
+
 def test_review_and_reconnect_messages_have_no_figures():
-    for m in (push.REVIEW_MESSAGE, push.RECONNECT_MESSAGE):
+    for m in (push.REVIEW_MESSAGE, push.RECONNECT_MESSAGE, push.CATEGORY_MESSAGE):
         assert not re.search(r"\d|\$", " ".join(m.values()))
         assert m["public_title"] == m["title"]
 
@@ -201,6 +210,63 @@ def test_the_notice_goes_out_before_marking_the_email(env, monkeypatch):
         ["pending_extraction"]
     ]  # el movimiento ya existe; el correo, aún sin marcar
     assert _email_and_movements(user_id)[0] == ["extracted"]
+
+
+@requires_local
+def test_cash_invoice_notice_says_it_was_counted_in_the_withdrawal(env, users, fcm):
+    user_id, _ = env
+    device("tok-a", users["a"])
+    tx(user_id, "15800", counts_in_budget=False, payment_method="cash")
+    assert push.new_movements(user_id) == 1
+    assert fcm.sent[0][1]["body"] == (
+        f"Registramos tu factura de {cop(Decimal(15800))} en efectivo. Ya estaba contada en tu retiro."
+    )
+
+
+@requires_local
+def test_unknown_category_is_asked_once_and_disappears_when_chosen(
+    env, users, fcm, monkeypatch
+):
+    user_id, _ = env
+    a = users["a"]
+    device("tok-a", a)
+    monkeypatch.setattr(settings, "ollama_url", "http://ollama.test")
+    # No la sabe: elige «Otros» (igual que si no respondiera ninguna).
+    monkeypatch.setattr(llm, "ask_category", lambda merchant, names: "Otros")
+    other = svc("GET", "categories?name=eq.Otros&user_id=is.null&select=id")[0]["id"]
+    pending = {"category_id": other, "category_source": "pendiente"}
+    t = tx(user_id, "45500", merchant="ESTACION DE SERVICIO EJEMPLO", **pending)
+    tx(user_id, "9000", status="pending_review", merchant="OTRO COMERCIO", **pending)
+
+    assert categorize.run_pending(user_id) == 2  # el backfill no pregunta
+    assert fcm.sent == []
+    svc("PATCH", f"transactions?id=eq.{t['id']}", json={"category_source": "pendiente"})
+    assert categorize.run_pending(user_id, ask=True) == 1
+    # Solo el gasto confirmado; el por confirmar ya tiene su aviso y su hoja.
+    assert [(d["tipo"], d["transaction_id"]) for _, d in fcm.sent] == [
+        (push.CATEGORY, t["id"])
+    ]
+    assert fcm.sent[0][1]["title"] == "¿En qué categoría va este gasto?"
+    categorize._ask(user_id, {**t, "direction": "expense", "status": "confirmed"})
+    assert len(fcm.sent) == 1  # una sola pregunta por movimiento
+
+    def asked():
+        r = client.get(f"/transactions/{t['id']}", headers=bearer(a["token"]))
+        return r.json()["preguntar_categoria"]
+
+    assert asked() is True
+    food = svc("GET", "categories?name=eq.Alimentos&user_id=is.null&select=id")[0]["id"]
+    r = client.patch(
+        f"/transactions/{t['id']}/category",
+        headers=bearer(a["token"]),
+        json={"category_id": food},
+    )
+    assert r.status_code == 200
+    assert asked() is False
+    rules = svc("GET", f"category_rules?user_id=eq.{user_id}&select=merchant_key")
+    assert rules == [
+        {"merchant_key": "ESTACION DE SERVICIO EJEMPLO"}
+    ]  # regla del Paso 10
 
 
 @requires_local
