@@ -77,21 +77,33 @@ def ingest(
         decision.rule,
         decision.sender_domain,
     )
+    user_accounts: list[dict] | None = None
+    notified = False
+
+    def notify() -> None:
+        """El aviso sale en cuanto el movimiento está escrito, antes de marcar el correo (RQN 04)."""
+        nonlocal notified
+        notified = True
+        try:
+            # [received_ms]: cuándo lo recibió Gmail (RQN 04)
+            push.new_movements(user_id, received_ms, accounts=user_accounts)
+        except Exception as e:  # noqa: BLE001 - un aviso que falla no debe perder el correo
+            log.error("falló el aviso id=%s error=%s", rows[0]["id"], type(e).__name__)
+
     try:
+        user_accounts = pipeline.accounts(user_id)  # una sola lectura por correo
         pipeline.process(
             user_id,
             rows[0]["id"],
             decision.rule,
             msg,
             datetime.fromisoformat(rows[0]["received_at"]),
+            user_accounts,
+            before_mark=notify,
         )
     except Exception as e:  # noqa: BLE001 - el correo ya está guardado; un fallo no debe perderlo
         # Queda en pending_extraction. Solo el tipo: el mensaje podría llevar datos del correo.
         log.error("falló la extracción id=%s error=%s", rows[0]["id"], type(e).__name__)
-    try:
-        push.new_movements(
-            user_id, received_ms
-        )  # [received_ms]: cuándo lo recibió Gmail (RQN 04)
-    except Exception as e:  # noqa: BLE001 - un aviso que falla no debe perder el correo
-        log.error("falló el aviso id=%s error=%s", rows[0]["id"], type(e).__name__)
+    if not notified:
+        notify()  # la extracción falló antes: igual se avisa lo que haya quedado sin avisar
     return "stored"

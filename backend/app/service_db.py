@@ -5,6 +5,15 @@ import httpx
 from app.config import settings
 
 
+def new_client() -> httpx.Client:
+    """Un cliente para todo el proceso (Supabase y FCM). Crear uno por llamada armaba su contexto TLS
+    cada vez: ~360 ms por consulta en Windows (Paso 14). Lo cierra el lifespan al apagar."""
+    return httpx.Client(timeout=httpx.Timeout(10, connect=5))
+
+
+http = new_client()
+
+
 def rest(
     method: str, table: str, *, params=None, json=None, prefer: str | None = None
 ) -> httpx.Response:
@@ -12,7 +21,7 @@ def rest(
     headers = {"apikey": key, "Authorization": f"Bearer {key}"}
     if prefer:
         headers["Prefer"] = prefer
-    r = httpx.request(
+    r = http.request(
         method,
         f"{settings.supabase_url}/rest/v1/{table}",
         params=params,

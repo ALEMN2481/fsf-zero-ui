@@ -34,7 +34,12 @@ logging.basicConfig(
 async def lifespan(_app: FastAPI):
     # Precarga el LLM de respaldo en segundo plano: el arranque no espera ni falla si Ollama no está.
     threading.Thread(target=llm.preload, daemon=True).start()
+    # Clientes HTTP compartidos: nuevos en cada arranque y cerrados al apagar (los tests arrancan
+    # la app más de una vez).
+    service_db.http, gmail.http = service_db.new_client(), httpx.Client(timeout=10)
     yield
+    service_db.http.close()
+    gmail.http.close()
 
 
 app = FastAPI(title="Finanzas Sin Filtro API", lifespan=lifespan)
@@ -75,7 +80,7 @@ def _call(
     }
     if prefer:
         headers["Prefer"] = prefer
-    return httpx.request(
+    return service_db.http.request(
         method,
         f"{settings.supabase_url}/rest/v1/{path}",
         headers=headers,

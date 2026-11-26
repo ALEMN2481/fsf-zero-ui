@@ -143,6 +143,66 @@ def test_new_expense_sends_one_notice_with_engine_figures(env, users, fcm):
     assert push.new_movements(user_id) == 0 and len(fcm.sent) == 1
 
 
+def _email_and_movements(user_id):
+    emails = svc("GET", f"inbound_emails?user_id=eq.{user_id}&select=status")
+    txs = svc("GET", f"transactions?user_id=eq.{user_id}&select=notified_at")
+    return [e["status"] for e in emails], [t["notified_at"] is not None for t in txs]
+
+
+@requires_local
+def test_if_fcm_fails_the_email_is_consistent_and_a_retry_does_not_notify_twice(
+    env, users, fcm
+):
+    user_id, _ = env
+    device("tok-a", users["a"])
+    fcm.status = 500
+    raw = today_alert()
+    assert ingest(user_id, raw, "gmail", "gmail:falla", received_ms=1) == "stored"
+    assert len(fcm.sent) == 1
+    # El correo queda extraído y el movimiento reclamado: el aviso se pierde, nunca sale doble.
+    assert _email_and_movements(user_id) == (["extracted"], [True])
+    fcm.status = 200
+    assert (
+        ingest(user_id, raw, "gmail", "gmail:falla") == "duplicate"
+    )  # reintento de Pub/Sub
+    assert push.new_movements(user_id) == 0
+    assert len(fcm.sent) == 1
+
+
+@requires_local
+def test_an_error_while_notifying_still_marks_the_email(env, users, fcm, monkeypatch):
+    user_id, _ = env
+
+    def boom(*a, **kw):
+        raise httpx.ConnectError("caído")
+
+    monkeypatch.setattr(push, "_device_tokens", boom)
+    assert ingest(user_id, today_alert(), "gmail", "gmail:error") == "stored"
+    # Sin reclamar: el próximo correo avisará este movimiento.
+    assert _email_and_movements(user_id) == (["extracted"], [False])
+    monkeypatch.undo()
+    monkeypatch.setattr(settings, "fcm_credentials_file", "simulado.json")
+    monkeypatch.setattr(push, "_post", fcm)
+    device("tok-a", users["a"])
+    assert push.new_movements(user_id) == 1
+
+
+@requires_local
+def test_the_notice_goes_out_before_marking_the_email(env, monkeypatch):
+    user_id, _ = env
+    seen = []
+    monkeypatch.setattr(
+        push,
+        "new_movements",
+        lambda *a, **kw: seen.append(_email_and_movements(user_id)[0]),
+    )
+    assert ingest(user_id, today_alert(), "gmail", "gmail:orden") == "stored"
+    assert seen == [
+        ["pending_extraction"]
+    ]  # el movimiento ya existe; el correo, aún sin marcar
+    assert _email_and_movements(user_id)[0] == ["extracted"]
+
+
 @requires_local
 def test_review_income_and_own_transfer(env, users, fcm):
     user_id, _ = env

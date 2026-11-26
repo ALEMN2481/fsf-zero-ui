@@ -43,6 +43,13 @@ class NeedsReconnect(Exception):
 # Para producción (Paso 16), guardarlo en la BD con caducidad.
 _states: dict[str, tuple[str, str, float]] = {}
 
+# Access tokens de Gmail por usuario: (token, caduca en monotonic). Evita pedir uno a Google en cada
+# aviso de Pub/Sub (RQN 04). Solo en memoria, nunca en logs ni en la BD. Se descarta al reconectar,
+# al desconectar, ante un 401 de Gmail o un invalid_grant.
+# shortcut: por proceso; con varias instancias cada una pide el suyo (Paso 16), lo que es correcto.
+_tokens: dict[str, tuple[str, float]] = {}
+TOKEN_MARGIN = 120  # s: se renueva antes de que caduque
+
 
 def authorization_url(user_id: str) -> str:
     now = monotonic()
@@ -170,6 +177,7 @@ def connect(user_id: str, code: str, verifier: str) -> None:
             "updated_at": datetime.now(UTC).isoformat(),
         },
     )
+    _tokens.pop(user_id, None)  # el refresh_token cambió
     log.info("gmail conectado user=%s", user_id)
 
 
@@ -181,16 +189,22 @@ def _update(user_id: str, **fields) -> None:
 
 
 def _access_token(conn: dict) -> str | None:
-    """Access token nuevo; ante invalid_grant marca la conexión como caída y no reintenta."""
+    """Access token de Gmail, de memoria si le quedan más de TOKEN_MARGIN s; si no, uno nuevo.
+
+    Ante invalid_grant marca la conexión como caída y no reintenta.
+    """
+    user_id = conn["user_id"]
+    cached = _tokens.get(user_id)
+    if cached and cached[1] > monotonic() + TOKEN_MARGIN:
+        return cached[0]
+    _tokens.pop(user_id, None)
     refresh = crypto.decrypt(
         conn["key_version"],
         service_db.from_bytea(conn["refresh_token_encrypted"]),
         conn["user_id"].encode(),
     ).decode()
     try:
-        return _token_request(
-            {"grant_type": "refresh_token", "refresh_token": refresh}
-        )["access_token"]
+        body = _token_request({"grant_type": "refresh_token", "refresh_token": refresh})
     except NeedsReconnect:
         # Solo quien la pasa de active a needs_reconnect avisa: un aviso por caída (D16).
         changed = service_db.rest(
@@ -211,6 +225,11 @@ def _access_token(conn: dict) -> str | None:
         if changed:
             push.gmail_disconnected(conn["user_id"])
         return None
+    _tokens[user_id] = (
+        body["access_token"],
+        monotonic() + int(body.get("expires_in", 3600)),
+    )
+    return body["access_token"]
 
 
 _CONN_FIELDS = "user_id,status,key_version,refresh_token_encrypted,history_id"
@@ -273,6 +292,19 @@ def process_notification(gmail_address: str, history_id: int) -> int:
     if access is None:
         return 0
 
+    def get(path: str, **kw) -> httpx.Response:
+        """GET a Gmail; ante un 401 (token revocado o caducado antes de tiempo) descarta el de
+        memoria y reintenta una vez con uno nuevo."""
+        nonlocal access
+        r = _gmail("GET", access, path, **kw)
+        if r.status_code == 401:
+            _tokens.pop(conn["user_id"], None)
+            access = _access_token(conn)
+            if access is None:
+                return r  # quedó needs_reconnect: el 500 hace que Pub/Sub reintente y lo confirme
+            r = _gmail("GET", access, path, **kw)
+        return r
+
     message_ids: list[str] = []
     latest, page = history_id, None
     while True:
@@ -282,7 +314,7 @@ def process_notification(gmail_address: str, history_id: int) -> int:
         }
         if page:
             params["pageToken"] = page
-        r = _gmail("GET", access, "history", params=params)
+        r = get("history", params=params)
         if r.status_code == 404:
             # shortcut: history_id demasiado viejo (> ~1 semana sin avisos); se salta al actual sin
             # recuperar lo perdido. Mejorar con una búsqueda por remitentes si llega a pasar.
@@ -299,9 +331,7 @@ def process_notification(gmail_address: str, history_id: int) -> int:
 
     stored = 0
     for mid in dict.fromkeys(message_ids):  # sin repetidos, en orden
-        meta = _gmail(
-            "GET",
-            access,
+        meta = get(
             f"messages/{mid}",
             params={"format": "metadata", "metadataHeaders": ["From", "Subject"]},
         )
@@ -318,7 +348,7 @@ def process_notification(gmail_address: str, history_id: int) -> int:
         if not mail.allowed_location(kind, meta.json().get("labelIds", [])):
             log.info("correo omitido motivo=carpeta tipo=%s", kind)
             continue
-        full = _gmail("GET", access, f"messages/{mid}", params={"format": "raw"})
+        full = get(f"messages/{mid}", params={"format": "raw"})
         full.raise_for_status()
         raw = base64.urlsafe_b64decode(full.json()["raw"] + "==")
         received_ms = int(meta.json().get("internalDate", 0)) or None
@@ -384,3 +414,4 @@ def disconnect(user_id: str) -> None:
         except httpx.HTTPError:
             log.warning("no se pudo revocar el token en Google user=%s", user_id)
     service_db.rest("DELETE", "gmail_connections", params={"user_id": f"eq.{user_id}"})
+    _tokens.pop(user_id, None)

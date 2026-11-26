@@ -10,6 +10,7 @@ Doble conteo factura/banco (regla del supervisor, en los dos órdenes de llegada
 import html
 import logging
 import re
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from email.message import EmailMessage
@@ -96,11 +97,14 @@ def _txs(user_id: str, **filters) -> list[dict]:
     return rows
 
 
-def _account_id(user_id: str, last4: str | None) -> str | None:
-    if not last4:
-        return None
-    rows = _get("accounts", user_id=f"eq.{user_id}", last4=f"eq.{last4}", select="id")
-    return rows[0]["id"] if len(rows) == 1 else None
+def accounts(user_id: str) -> list[dict]:
+    """Cuentas del usuario (id, last4): una lectura por correo, compartida con el aviso."""
+    return _get("accounts", user_id=f"eq.{user_id}", select="id,last4")
+
+
+def _account_id(accounts: list[dict], last4: str | None) -> str | None:
+    found = [a["id"] for a in accounts if last4 and a["last4"] == last4]
+    return found[0] if len(found) == 1 else None
 
 
 def _insert(row: dict) -> None:
@@ -112,7 +116,11 @@ def _update(tx_id: str, row: dict) -> None:
 
 
 def _process_alert(
-    user_id: str, email_id: str, msg: EmailMessage, received_at: datetime
+    user_id: str,
+    email_id: str,
+    msg: EmailMessage,
+    received_at: datetime,
+    user_accounts: list[dict],
 ) -> str:
     text = body_text(msg)
     alert = bancolombia.parse_alert(text)
@@ -135,7 +143,7 @@ def _process_alert(
         "merchant": alert.merchant,
         "occurred_at": alert.occurred_at.isoformat(),
         "payment_method": alert.payment_method,
-        "account_id": _account_id(user_id, alert.last4),
+        "account_id": _account_id(user_accounts, alert.last4),
         "to_last4": alert.to_last4,
         "source_ref": f"bank:{email_id}",
         "status": status,
@@ -238,9 +246,18 @@ def _process_invoice(user_id: str, email_id: str, msg: EmailMessage) -> str:
 
 
 def process(
-    user_id: str, email_id: str, rule: str, msg: EmailMessage, received_at: datetime
+    user_id: str,
+    email_id: str,
+    rule: str,
+    msg: EmailMessage,
+    received_at: datetime,
+    user_accounts: list[dict] | None = None,
+    before_mark: Callable[[], None] | None = None,
 ) -> str:
     """Extrae el movimiento de un correo recién guardado y marca su estado. Devuelve el estado.
+
+    [user_accounts]: las cuentas ya leídas (si no, se leen). [before_mark] se llama con el movimiento
+    ya escrito y antes de marcar el correo: el aviso no espera a esa escritura (RQN 04).
 
     shortcut: sin bloqueo entre avisos simultáneos del mismo usuario (una alerta y su factura a la vez
     podrían no encontrarse y contarse dos veces); con varias instancias, serializar por usuario (Paso 16).
@@ -248,9 +265,13 @@ def process(
     if rule == INVOICE_RULE:
         status = _process_invoice(user_id, email_id, msg)
     elif rule == "bancolombia":
-        status = _process_alert(user_id, email_id, msg, received_at)
+        if user_accounts is None:
+            user_accounts = accounts(user_id)
+        status = _process_alert(user_id, email_id, msg, received_at, user_accounts)
     else:
         status = "pending_review"
+    if before_mark:
+        before_mark()
     service_db.rest(
         "PATCH",
         "inbound_emails",

@@ -1,0 +1,75 @@
+Paso 14 · Perfil del backend: correo descargado → envío a FCM (2026-11-26)
+Entorno: backend y Supabase locales (Windows + Docker), FCM real, alerta Bancolombia de compra
+(«LIBRERIA DE PRUEBA», $ 12.300) para el usuario demo con el emulador registrado.
+El LLM de categorías va en un hilo aparte y no se mide. No incluye las llamadas a la API de Gmail
+(history + metadata + raw): Gmail está desconectado; se medirán en la prueba real.
+Mediana de 5 corridas en caliente (la primera, en frío, aparte).
+
+A) Código actual (un cliente HTTP nuevo por llamada)
+etapa                                   llamadas   ms
+mail.parse/classify/sanitize/hash/cifrado   5         ~1
+BD POST inbound_emails                      1        364
+  pipeline.process                                  2301
+    parse_alert                             1          0
+    BD GET accounts (_account_id)           1       ~410
+    BD GET transactions (facturas pend.)    1       ~440
+    categorize.assign                               753
+      BD GET category_rules                 1        369
+      BD GET categories (_global_id)        1        399
+    BD POST transactions                    1        413
+    BD PATCH inbound_emails (estado)        1        405
+  push.new_movements                                4485
+    BD GET transactions (sin avisar)        1       ~440
+    BD GET accounts (own_accounts)          1       ~410
+    BD PATCH transactions (notified_at)     1        390
+    engine_store.load                              1975
+      BD GET budgets                        1        477
+      BD GET pocket_movements               1        635
+      BD GET accounts (otra vez)            1        446
+      BD GET transactions (del periodo)     1        438
+    gps.summary                                        0
+    push.send                                       1036
+      BD GET device_tokens                  1        400
+      FCM envío                             1        629
+      (OAuth FCM, solo en frío)             1        726
+TOTAL ingest                                        7114 (frío 8432)
+
+Causa: service_db.rest usa httpx.request y push usa httpx.post; cada llamada crea un httpx.Client
+y su contexto TLS (certifi), ~360 ms en Windows aunque la URL sea http://. Prueba aislada:
+  httpx.get nuevo cada vez: 474 366 373 367 344 ms
+  httpx.Client reutilizado:  18   4   4  12   5 ms
+  TCP connect a 127.0.0.1:54321: 0-1 ms
+
+B) Mismo código con un solo httpx.Client compartido (parche solo en el script)
+etapa                                   llamadas   ms
+BD POST inbound_emails                      1        172
+pipeline.process                                     376
+  (category_rules 33, categories 5, POST transactions 97, PATCH inbound_emails 79)
+push.new_movements                                   598
+  (GET accounts + GET transactions de pipeline y de new_movements: 85 y 68 en total,
+   PATCH notified_at 141, load 211 [budgets 43, pockets 46, accounts 56, transactions 100],
+   device_tokens 33, FCM envío 192)
+TOTAL ingest                                        1219 (frío 912; rango 812-2206 en 8 corridas)
+
+Consultas a Supabase por correo: 15 (4 escrituras). accounts se lee 3 veces.
+
+C) Optimizado (aprobado por el supervisor): cliente compartido, aviso primero, lecturas en paralelo,
+una lectura de accounts. Mismo script, mismo usuario, 2 tandas de 6 corridas.
+etapa                                   llamadas   ms
+BD POST inbound_emails                      1         49
+BD GET accounts (una por correo)            1          4
+pipeline (alerta, categoría, POST tx)       4        ~80
+push.new_movements                                  272
+  GET transactions sin avisar               1         10
+  en paralelo: device_tokens | load         1|3      ~34
+    (budgets 17, luego pockets 10 | transactions 9 en paralelo)
+  PATCH notified_at                         1         50
+  FCM envío                                 1        ~180
+BD PATCH inbound_emails (tras el aviso)     1         51
+TOTAL ingest                                        447 (2.ª tanda: 401-422 ms; frío 908-911 ms,
+                                                    que incluye pedir el token OAuth de FCM)
+Consultas a Supabase por correo: 13 (antes 15); accounts, 1 vez (antes 3).
+
+Resumen antes → después (mediana en caliente): 7.114 ms → ~410 ms. Hasta el envío a FCM: ~360 ms.
+Falta: API de Gmail (history + metadata + raw; el token ya va en memoria), en la prueba real.
+Script: scratchpad profile_ingest.py (no versionado).

@@ -100,6 +100,8 @@ class FakeGoogle:
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.requests.append(req)
         url, path = str(req.url), req.url.path
+        if req.headers.get("authorization") == "Bearer revocado":
+            return httpx.Response(401, json={"error": {"code": 401}})
         for fragment, (status, body) in self.fail.items():
             if fragment in url:
                 return httpx.Response(status, json=body)
@@ -185,6 +187,7 @@ def env(monkeypatch):
         gmail, "_google_signing_key", lambda token: GOOGLE_KEY.public_key()
     )
     monkeypatch.setattr(gmail, "_states", {})
+    monkeypatch.setattr(gmail, "_tokens", {})
     app.dependency_overrides[current_user] = lambda: CurrentUser(
         id="user-a", token="jwt-usuario"
     )
@@ -369,6 +372,54 @@ def test_invalid_grant_marks_needs_reconnect_without_retrying(env):
     assert push(env, push_token()).status_code == 204
     assert env.google.calls(gmail.TOKEN_URL) == tokens_before  # ya no se intenta más
     assert env.ingested == []
+
+
+# ---------------------------------------------------------------- token de Gmail en memoria
+def test_access_token_is_reused_until_close_to_expiry_and_never_logged(env, caplog):
+    caplog.set_level(logging.DEBUG)
+    env.db.add()
+    assert push(env, push_token()).status_code == 204
+    assert push(env, push_token()).status_code == 204
+    assert (
+        env.google.calls(gmail.TOKEN_URL) == 1
+    )  # el segundo aviso no pide token a Google
+    # A menos de TOKEN_MARGIN de caducar, se renueva.
+    gmail._tokens["user-a"] = ("acc-1", time.monotonic() + gmail.TOKEN_MARGIN - 1)
+    assert push(env, push_token()).status_code == 204
+    assert env.google.calls(gmail.TOKEN_URL) == 2
+    assert "acc-1" not in caplog.text
+
+
+def test_a_401_from_gmail_discards_the_token_and_retries_once(env):
+    env.db.add()
+    gmail._tokens["user-a"] = ("revocado", time.monotonic() + 3000)
+    assert push(env, push_token()).status_code == 204
+    assert env.google.calls(gmail.TOKEN_URL) == 1  # uno nuevo tras el 401
+    assert gmail._tokens["user-a"][0] == "acc-1"
+    assert env.db.conns["user-a"]["history_id"] == 130  # el reintento leyó el historial
+
+
+def test_a_401_then_invalid_grant_marks_needs_reconnect(env):
+    env.db.add()
+    gmail._tokens["user-a"] = ("revocado", time.monotonic() + 3000)
+    env.google.token_error = "invalid_grant"
+    with pytest.raises(
+        httpx.HTTPStatusError
+    ):  # 500: Pub/Sub reintenta y ya lo ve caído
+        gmail.process_notification("usuario.ejemplo@gmail.com", 125)
+    assert "user-a" not in gmail._tokens
+    assert env.db.conns["user-a"]["status"] == "needs_reconnect"
+    assert push(env, push_token()).status_code == 204  # el reintento se confirma
+
+
+def test_reconnecting_or_disconnecting_forgets_the_token(env):
+    env.db.add()
+    gmail._tokens["user-a"] = ("acc-viejo", time.monotonic() + 3000)
+    assert env.client.post("/gmail/disconnect").status_code == 204
+    assert "user-a" not in gmail._tokens
+    gmail._tokens["user-a"] = ("acc-viejo", time.monotonic() + 3000)
+    gmail.connect("user-a", "codigo", "verificador")
+    assert "user-a" not in gmail._tokens
 
 
 def test_old_history_id_skips_to_current(env):

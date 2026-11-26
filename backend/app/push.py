@@ -13,6 +13,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from urllib.parse import quote
@@ -101,7 +102,7 @@ def _access_token() -> str:
             info["private_key"],
             algorithm="RS256",
         )
-        r = httpx.post(
+        r = service_db.http.post(
             info["token_uri"],
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -116,7 +117,7 @@ def _access_token() -> str:
 
 
 def _post(token: str, data: dict[str, str]) -> httpx.Response:
-    return httpx.post(
+    return service_db.http.post(
         f"https://fcm.googleapis.com/v1/projects/{_project_id()}/messages:send",
         headers={"Authorization": f"Bearer {_access_token()}"},
         json={
@@ -139,36 +140,45 @@ def _unregistered(r: httpx.Response) -> bool:
     return any(d.get("errorCode") == "UNREGISTERED" for d in details)
 
 
+def _device_tokens(user_id: str) -> list[str]:
+    return [
+        r["token"]
+        for r in service_db.rest(
+            "GET",
+            "device_tokens",
+            params={"user_id": f"eq.{user_id}", "select": "token"},
+        ).json()
+    ]
+
+
 def send(
     user_id: str,
     kind: str,
     message: dict,
     extra: dict | None = None,
     post: Sender | None = None,
+    tokens: list[str] | None = None,
 ) -> int:
     """Envía [message] a todos los dispositivos del usuario. Devuelve cuántos lo aceptaron.
 
-    Los tokens que FCM da por muertos (UNREGISTERED o 404) se borran. Nunca lanza: un aviso que
-    falla no debe romper la ingesta.
+    [tokens]: los del usuario, si ya se leyeron. Los que FCM da por muertos (UNREGISTERED) se
+    borran. Nunca lanza: un aviso que falla no debe romper la ingesta.
     """
     if post is None and not enabled():
         return 0
     post = post or _post
     data = {"tipo": kind, **message, **{k: str(v) for k, v in (extra or {}).items()}}
-    try:
-        tokens = [
-            r["token"]
-            for r in service_db.rest(
-                "GET",
-                "device_tokens",
-                params={"user_id": f"eq.{user_id}", "select": "token"},
-            ).json()
-        ]
-    except httpx.HTTPError as e:
-        log.error(
-            "aviso no enviado tipo=%s user=%s error=%s", kind, user_id, type(e).__name__
-        )
-        return 0
+    if tokens is None:
+        try:
+            tokens = _device_tokens(user_id)
+        except httpx.HTTPError as e:
+            log.error(
+                "aviso no enviado tipo=%s user=%s error=%s",
+                kind,
+                user_id,
+                type(e).__name__,
+            )
+            return 0
     sent = 0
     for token in tokens:
         try:
@@ -219,9 +229,17 @@ def _today() -> date:
 
 
 def new_movements(
-    user_id: str, received_ms: int | None = None, post: Sender | None = None
+    user_id: str,
+    received_ms: int | None = None,
+    post: Sender | None = None,
+    accounts: list[dict] | None = None,
 ) -> int:
-    """Tras la ingesta: un aviso por cada gasto nuevo (confirmado o por confirmar) sin avisar."""
+    """Tras la ingesta: un aviso por cada gasto nuevo (confirmado o por confirmar) sin avisar.
+
+    [accounts]: las cuentas del usuario ya leídas en la ingesta (id, last4); si no, se leen.
+    El reclamo (notified_at) va antes del envío: si FCM falla, ese aviso se pierde pero nunca sale
+    dos veces; el movimiento ya está en la app.
+    """
     if post is None and not enabled():
         return 0
     rows = service_db.rest(
@@ -239,7 +257,18 @@ def new_movements(
     if not rows:
         return 0
     rest = user_rest(user_id)
-    own = engine_store.own_accounts(rest)
+    if accounts is None:
+        own = engine_store.own_accounts(rest)
+    else:
+        own = {a["last4"] for a in accounts if a["last4"]}
+    # Tokens y datos del motor no dependen entre sí: en paralelo (RQN 04). El estado del motor ya
+    # incluye todos los movimientos nuevos, así que vale para cada aviso de esta tanda.
+    with ThreadPoolExecutor(2) as pool:
+        tokens = pool.submit(_device_tokens, user_id)
+        state = None
+        if any(r["status"] == "confirmed" for r in rows):
+            state = pool.submit(lambda: gps.summary(*_load(rest, _today(), own)))
+        tokens, state = tokens.result(), state and state.result()
     count = 0
     for row in rows:
         claimed = service_db.rest(
@@ -259,15 +288,13 @@ def new_movements(
         if row["status"] == "pending_review":
             message, kind = REVIEW_MESSAGE, REVIEW
         else:
-            today = _today()
-            state = gps.summary(*_load(rest, today))
             message, kind = spent_message(Decimal(row["amount"]), state), SPENT
-        count += send(user_id, kind, message, extra, post)
+        count += send(user_id, kind, message, extra, post, tokens)
     return count
 
 
-def _load(rest, today):
-    budget, movements, pockets = engine_store.load(rest, today)
+def _load(rest, today, own=None):
+    budget, movements, pockets = engine_store.load(rest, today, own)
     return budget, today, movements, pockets
 
 

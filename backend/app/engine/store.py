@@ -5,6 +5,7 @@ como texto exacto y se convierte a Decimal, nunca a float.
 """
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from urllib.parse import quote
@@ -59,9 +60,15 @@ def kind(t: dict, own: set[str]) -> str:
     )
 
 
-def movements(rest: Rest, first: date, last: date) -> list[Movement]:
-    """Movimientos entre dos días, sin los descartados ('No es un gasto mío')."""
-    own = own_accounts(rest)
+def movements(
+    rest: Rest, first: date, last: date, own: set[str] | None = None
+) -> list[Movement]:
+    """Movimientos entre dos días, sin los descartados ('No es un gasto mío').
+
+    [own]: últimos 4 dígitos de las cuentas propias, si ya se leyeron.
+    """
+    if own is None:
+        own = own_accounts(rest)
     return [
         Movement(
             day=_day(t["occurred_at"]),
@@ -85,16 +92,20 @@ def previous_month(rest: Rest, today: date) -> list[Movement]:
 
 
 def load(
-    rest: Rest, today: date
+    rest: Rest, today: date, own: set[str] | None = None
 ) -> tuple[Budget | None, list[Movement], list[tuple[date, Decimal]]]:
     budget = budget_for(rest, today)
     if budget is None:
         return None, [], []
-    pockets = [
-        (_day(p["occurred_at"]), Decimal(p["amount"]))
-        for p in rest(
+    # Bolsillos y movimientos no dependen entre sí: en paralelo (RQN 04).
+    with ThreadPoolExecutor(2) as pool:
+        pocket_rows = pool.submit(
+            rest,
             f"pocket_movements?{_bounds(budget.start, budget.end)}"
-            "&select=amount::text,occurred_at"
+            "&select=amount::text,occurred_at",
         )
-    ]
-    return budget, movements(rest, budget.start, budget.end), pockets
+        moves = pool.submit(movements, rest, budget.start, budget.end, own)
+        pockets = [
+            (_day(p["occurred_at"]), Decimal(p["amount"])) for p in pocket_rows.result()
+        ]
+        return budget, moves.result(), pockets

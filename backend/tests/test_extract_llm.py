@@ -140,8 +140,12 @@ def test_preload_tolerates_missing_ollama(monkeypatch, caplog):
 
 
 def test_backend_starts_without_waiting_for_the_preload(monkeypatch):
+    from app import gmail, service_db
     from app.main import app
 
+    # El lifespan cambia y cierra los clientes HTTP compartidos: se restauran al terminar.
+    monkeypatch.setattr(service_db, "http", service_db.http)
+    monkeypatch.setattr(gmail, "http", gmail.http)
     release = threading.Event()
     monkeypatch.setattr(llm, "preload", lambda: release.wait(10))
     start = time.perf_counter()
@@ -149,3 +153,4 @@ def test_backend_starts_without_waiting_for_the_preload(monkeypatch):
         assert client.get("/health").status_code == 200
         assert time.perf_counter() - start < 2  # no esperó los 10 s de la precarga
     release.set()
+    assert service_db.http.is_closed and gmail.http.is_closed  # se cierran al apagar
