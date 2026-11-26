@@ -34,6 +34,17 @@ jobs:
       - if: hashFiles('backend/requirements.txt') != ''
         run: pytest backend
 
+  # Paso 15 (RQN 01): vulnerabilidades conocidas en las dependencias del backend y de la app.
+  dependencias:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit && pip-audit -r backend/requirements.txt
+      - run: python .github/scripts/audit_pub.py app/pubspec.lock
+
   app:
     runs-on: ubuntu-latest
     steps:
