@@ -43,7 +43,8 @@
     "gasto": "175200.00",
     "efectivo_factura": "0.00"
    }
-  ]
+  ],
+  "reservado": "350000.00"
  },
  "movements": [
   {

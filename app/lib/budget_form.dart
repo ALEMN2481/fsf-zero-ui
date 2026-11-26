@@ -101,10 +101,7 @@ class _BudgetFormState extends State<BudgetForm> {
         const SizedBox(height: 4),
         const Text('Se renueva solo cada mes.'),
         const SizedBox(height: 16),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(widget.current == null ? 'Empezar' : 'Guardar'),
-        ),
+        FilledButton(onPressed: _saving ? null : _save, child: Text(widget.current == null ? 'Empezar' : 'Guardar')),
       ],
     );
   }

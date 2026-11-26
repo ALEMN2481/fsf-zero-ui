@@ -43,7 +43,8 @@
     "gasto": "175200.00",
     "efectivo_factura": "0.00"
    }
-  ]
+  ],
+  "reservado": "350000.00"
  },
  "movements": [
   {
@@ -260,14 +261,18 @@
    "user_id": null
   }
  ],
- "pockets": [
-  {
-   "id": "b3b1e2da-6852-42e5-9fdb-e8eda11ffe02",
-   "name": "Viaje",
-   "target_amount": "1000000.00",
-   "saldo": "350000.00"
-  }
- ],
+ "pockets": {
+  "total": "350000.00",
+  "bolsillos": [
+   {
+    "id": "b3b1e2da-6852-42e5-9fdb-e8eda11ffe02",
+    "name": "Viaje",
+    "target_amount": "1000000.00",
+    "saldo": "350000.00",
+    "porcentaje": 35
+   }
+  ]
+ },
  "suggestion": {
   "gasto_mes_anterior": "747750.00",
   "ingresos_mes_anterior": "2580000.00",

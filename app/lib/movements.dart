@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'money.dart';
+import 'theme.dart';
 
 const pendingLabel = 'POR CONFIRMAR';
 const _months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -49,22 +50,44 @@ class MovementCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final m = movement, text = Theme.of(context).textTheme;
-    final details = [m['categoria'] ?? 'Sin categoría', dateLabel(m['fecha'] as String, now), ?kindNote(m)];
+    final m = movement;
+    final details = [m['categoria'] ?? 'Sin categoría', ?kindNote(m)];
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title(m), style: Fsf.tarjeta),
+        if (m['estado'] == 'pending_review')
+          const Text(pendingLabel, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+        const SizedBox(height: 4),
+        Text(details.join(' · '), style: Fsf.secundario),
+      ],
+    );
+    final amount = Text(signedAmount(m), style: Fsf.montoTarjeta);
+    final date = Text(dateLabel(m['fecha'] as String, now), style: Fsf.secundario);
+    // Con el texto grande no caben dos columnas: el monto va debajo, sin partir el comercio.
+    final large = MediaQuery.textScalerOf(context).scale(16) > 16 * 1.4;
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(title(m), style: text.titleMedium),
-              if (m['estado'] == 'pending_review') Text(pendingLabel, style: text.labelLarge),
-              Text(details.join(' · ')),
-              Text(signedAmount(m), textAlign: TextAlign.end, style: text.titleMedium),
-            ],
-          ),
+          child: large
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [info, const SizedBox(height: 8), amount, date],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: info),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [amount, const SizedBox(height: 4), date],
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -73,7 +96,13 @@ class MovementCard extends StatelessWidget {
 
 /// Hoja inferior: categoría con un toque y, si está por confirmar, confirmar o descartar.
 class MovementSheet extends StatefulWidget {
-  const MovementSheet({super.key, required this.api, required this.movement, required this.now, required this.onChanged});
+  const MovementSheet({
+    super.key,
+    required this.api,
+    required this.movement,
+    required this.now,
+    required this.onChanged,
+  });
 
   final Api api;
   final Map<String, dynamic> movement;
@@ -116,43 +145,74 @@ class _MovementSheetState extends State<MovementSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final m = widget.movement, id = m['id'], text = Theme.of(context).textTheme;
-    final pending = m['estado'] == 'pending_review';
+    final m = widget.movement, id = m['id'];
+    final pending = m['estado'] == 'pending_review', income = m['direccion'] == 'income';
+    final amount = formatCop(m['monto'] as String);
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, Fsf.margen),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(title(m), style: text.titleLarge),
-            Text('${signedAmount(m)} · ${dateLabel(m['fecha'] as String, widget.now)}'),
-            if (pending) Text('Por confirmar', style: text.labelLarge),
+            if (pending)
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Fsf.superficie,
+                  child: Icon(Icons.error_outline, color: Fsf.texto, semanticLabel: 'Por confirmar'),
+                ),
+              ),
             const SizedBox(height: 16),
-            const Text('Categoría'),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final c in _categories)
-                  ChoiceChip(
-                    label: Text(c['name'] as String),
-                    selected: _selected == c['id'],
-                    onSelected: _busy
-                        ? null
-                        : (_) => _run(() async {
-                            await widget.api.patch('/transactions/$id/category', {'category_id': c['id']});
-                            if (mounted) setState(() => _selected = c['id'] as String);
-                          }),
-                  ),
-              ],
+            Text(
+              income ? '¿A qué categoría pertenece este movimiento?' : '¿A qué categoría pertenece este gasto?',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 26, height: 1.2),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '$amount ${income ? 'de' : 'en'} ${title(m)}',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 38, height: 1.12),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              [dateLabel(m['fecha'] as String, widget.now), if (pending) 'Por confirmar'].join(' · '),
+              style: Fsf.ayuda,
+            ),
+            const SizedBox(height: 24),
+            const Text('Categorías', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, box) => Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final c in _categories)
+                    SizedBox(
+                      width: (box.maxWidth - 12) / 2, // dos por fila
+                      child: CategoryOption(
+                        label: c['name'] as String,
+                        selected: _selected == c['id'],
+                        onTap: _busy
+                            ? null
+                            : () => _run(() async {
+                                await widget.api.patch('/transactions/$id/category', {'category_id': c['id']});
+                                if (mounted) setState(() => _selected = c['id'] as String);
+                              }),
+                      ),
+                    ),
+                ],
+              ),
             ),
             if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             if (pending) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               FilledButton(
                 onPressed: _busy ? null : () => _run(() => widget.api.post('/transactions/$id/confirm'), close: true),
                 child: const Text('Confirmar'),
               ),
-              OutlinedButton(
+              const SizedBox(height: 8),
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: Fsf.textoSecundario),
                 onPressed: _busy ? null : () => _run(() => widget.api.post('/transactions/$id/dismiss'), close: true),
                 child: const Text('No es un gasto mío'),
               ),
@@ -162,4 +222,44 @@ class _MovementSheetState extends State<MovementSheet> {
       ),
     );
   }
+}
+
+/// Categoría de la hoja: píldora gris (negra si está elegida), alto mínimo 64.
+class CategoryOption extends StatelessWidget {
+  const CategoryOption({super.key, required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    selected: selected,
+    button: true,
+    child: Material(
+      color: selected ? Fsf.primario : Fsf.superficie,
+      shape: const StadiumBorder(),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  color: selected ? Fsf.sobrePrimario : Fsf.texto,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }

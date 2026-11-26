@@ -32,6 +32,7 @@ Map<String, dynamic> gps({
   'diario_desde_manana': manana,
   'disponible_semana': '1313330.00',
   'en_revision': revision,
+  'reservado': '350000.00',
 };
 
 final movements = [
@@ -90,9 +91,12 @@ FakeBackend backend({Map<String, dynamic>? state, List<Map<String, dynamic>>? li
       'POST /transactions/t2/dismiss': (_) => {'id': 't2', 'estado': 'dismissed'},
       'PATCH /transactions/t2/category': (_) => {'id': 't2'},
       'POST /gmail/connect': (_) => {'url': 'https://accounts.google.com/o/oauth2/v2/auth?x=1'},
-      'GET /pockets': (_) => [
-        {'id': 'p1', 'name': 'Viaje', 'target_amount': '1000000.00', 'saldo': '500000.00'},
-      ],
+      'GET /pockets': (_) => {
+        'total': '500000.00',
+        'bolsillos': [
+          {'id': 'p1', 'name': 'Viaje', 'target_amount': '1000000.00', 'saldo': '500000.00', 'porcentaje': 50},
+        ],
+      },
     });
 
 Widget app(FakeBackend b, {double scale = 1, Stream<void>? changes, List<Uri>? opened}) => MaterialApp(
@@ -121,7 +125,7 @@ void main() {
     final b = backend();
     await tester.pumpWidget(app(b));
     await tester.pumpAndSettle();
-    expect(find.text('Hoy puedes gastar'), findsOneWidget);
+    expect(find.text('HOY PUEDES GASTAR'), findsOneWidget);
     expect(plain(tester.widget<Text>(find.byKey(const Key('disponible_hoy'))).data!), '\$ 246.666');
     expect(textContaining('Esta semana \$ 1.313.330'), findsOneWidget);
     expect(textContaining('Libre este mes \$ 1.580.000 · 6 días'), findsOneWidget);
@@ -130,15 +134,23 @@ void main() {
     expect(find.text(pendingLabel), findsOneWidget);
     expect(textContaining('efectivo, ya contado en el retiro'), findsOneWidget);
     expect(textContaining('-\$ 23.500'), findsOneWidget);
-    expect(textContaining('Alimentos · hoy 07:45'), findsOneWidget); // hora de Colombia
-    expect(textContaining('Otros · ayer 18:10'), findsOneWidget);
+    expect(find.text('hoy 07:45'), findsOneWidget); // hora de Colombia
+    expect(find.text('ayer 18:10'), findsOneWidget);
+    expect(textContaining('Reservado'), findsOneWidget);
+    expect(plain(tester.widget<Text>(find.byKey(const Key('reservado'))).data!), '\$ 350.000');
     expect(b.sent.every((r) => r.headers['Authorization'] == 'Bearer jwt-usuario'), isTrue);
   });
 
   testWidgets('2 · al pasarse: negativo, texto neutral y el diario que baja', (tester) async {
-    await tester.pumpWidget(app(backend(state: gps(hoy: '-66666.00', exceso: '66666.00', plan: '500000.00', manana: '486666.00'))));
+    await tester.pumpWidget(
+      app(
+        backend(
+          state: gps(hoy: '-66666.00', exceso: '66666.00', plan: '500000.00', manana: '486666.00'),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Hoy'), findsOneWidget);
+    expect(find.text('HOY'), findsOneWidget);
     expect(plain(tester.widget<Text>(find.byKey(const Key('disponible_hoy'))).data!), '-\$ 66.666');
     expect(textContaining('Hoy fuiste \$ 66.666 más allá de tu diario.'), findsOneWidget);
     expect(textContaining('Tu diario de mañana baja de \$ 500.000 a \$ 486.666.'), findsOneWidget);
@@ -148,10 +160,18 @@ void main() {
   });
 
   testWidgets('2b · mes sobregirado: lo dice una vez y el diario queda en 0', (tester) async {
-    await tester.pumpWidget(app(backend(state: gps(hoy: '0.00', libre: '-100000.00', manana: '0.00'))));
+    await tester.pumpWidget(
+      app(
+        backend(
+          state: gps(hoy: '0.00', libre: '-100000.00', manana: '0.00'),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(
-      textContaining('Este mes vas \$ 100.000 por encima de lo planeado. Tu diario queda en \$ 0 hasta el próximo mes.'),
+      textContaining(
+        'Este mes vas \$ 100.000 por encima de lo planeado. Tu diario queda en \$ 0 hasta el próximo mes.',
+      ),
       findsOneWidget,
     );
   });
@@ -214,8 +234,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('TIENDA DE BARRIO EJEMPLO'));
     await tester.pumpAndSettle();
-    expect(find.text('Por confirmar'), findsOneWidget);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Alimentos'));
+    expect(textContaining('Por confirmar'), findsOneWidget);
+    await tester.tap(find.widgetWithText(CategoryOption, 'Alimentos'));
     await tester.pumpAndSettle();
     expect(b.body('PATCH /transactions/t2/category'), {'category_id': 'c-ali'});
 
@@ -238,7 +258,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('PANADERIA EJEMPLO'));
     await tester.pumpAndSettle();
-    expect(find.byType(ChoiceChip), findsNWidgets(3));
+    expect(find.byType(CategoryOption), findsNWidgets(3));
     expect(find.text('Confirmar'), findsNothing);
     expect(find.text('No es un gasto mío'), findsNothing);
   });
@@ -266,8 +286,9 @@ void main() {
     testWidgets('lista con barra de progreso plana', (tester) async {
       await openPockets(tester);
       expect(find.text('Viaje'), findsOneWidget);
-      expect(textContaining('\$ 500.000'), findsOneWidget);
-      expect(textContaining('de \$ 1.000.000'), findsOneWidget);
+      expect(textContaining('\$ 500.000'), findsNWidgets(2)); // total y saldo del bolsillo
+      expect(textContaining('meta: \$ 1.000.000'), findsOneWidget);
+      expect(find.text('50 %'), findsOneWidget); // el % viene del backend
       expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 0.5);
     });
 
@@ -294,7 +315,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(textContaining('Puedes apartar hasta \$ 800.000'), findsOneWidget);
       b.routes['POST /pockets/p1/movements'] = (_) => {'pocket_id': 'p1', 'saldo': '1300000.00'};
-      await tester.tap(find.widgetWithText(FilledButton, 'Apartar ${'\$'}$nbsp' '800.000'));
+      await tester.tap(
+        find.widgetWithText(
+          FilledButton,
+          'Apartar ${'\$'}$nbsp'
+          '800.000',
+        ),
+      );
       await tester.pumpAndSettle();
       expect(b.body('POST /pockets/p1/movements'), {'amount': '800000.00'});
     });
@@ -338,7 +365,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(Table), findsNothing);
       expect(find.byType(DataTable), findsNothing);
-      expect(find.byType(CustomPaint).evaluate().where((e) => e.widget.runtimeType.toString().contains('Chart')), isEmpty);
+      expect(
+        find.byType(CustomPaint).evaluate().where((e) => e.widget.runtimeType.toString().contains('Chart')),
+        isEmpty,
+      );
       final pubspec = File('pubspec.yaml').readAsStringSync();
       for (final chart in ['fl_chart', 'charts_flutter', 'syncfusion_flutter_charts', 'graphic']) {
         expect(pubspec.contains(chart), isFalse, reason: chart);
@@ -370,11 +400,14 @@ void main() {
       await tester.pumpWidget(app(backend(), scale: 2));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.text('TIENDA DE BARRIO EJEMPLO'), 300);
+      await tester.ensureVisible(find.text('TIENDA DE BARRIO EJEMPLO')); // entera, no solo asomada
+      await tester.pumpAndSettle();
       await tester.tap(find.text('TIENDA DE BARRIO EJEMPLO'));
       await tester.pumpAndSettle();
+      expect(find.byType(MovementSheet), findsOneWidget);
       expect(tester.takeException(), isNull);
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      Navigator.of(tester.element(find.text('Por confirmar'))).pop();
+      Navigator.of(tester.element(find.byType(MovementSheet))).pop();
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Bolsillos'));
       await tester.pumpAndSettle();

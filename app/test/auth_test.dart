@@ -99,9 +99,16 @@ class Harness {
 /// La pantalla principal está a la vista (su menú «Más opciones»).
 final homeShown = find.byTooltip('Más opciones');
 
+/// El formulario es más alto que la superficie de test: se desplaza hasta el botón antes de tocarlo.
+Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+}
+
 Future<void> fill(WidgetTester tester, String email, String password) async {
-  await tester.enterText(find.widgetWithText(TextFormField, 'Correo'), email);
-  await tester.enterText(find.widgetWithText(TextFormField, 'Contraseña'), password);
+  await tester.enterText(find.byKey(const Key('email')), email);
+  await tester.enterText(find.byKey(const Key('password')), password);
 }
 
 void main() {
@@ -109,7 +116,7 @@ void main() {
     testWidgets('tiene 2 campos como máximo (RQN 05)', (tester) async {
       await tester.pumpWidget(Harness().app(FakeLock()));
       expect(find.byType(TextFormField), findsNWidgets(2));
-      await tester.tap(find.text('¿No tienes cuenta? Crear una'));
+      await tapVisible(tester, find.text('¿No tienes cuenta? Crear una'));
       await tester.pump();
       expect(find.byType(TextFormField), findsNWidgets(2));
     });
@@ -118,7 +125,7 @@ void main() {
       final h = Harness();
       await tester.pumpWidget(h.app(FakeLock()));
       await fill(tester, 'no-es-correo', 'corta12');
-      await tester.tap(find.text('Entrar'));
+      await tapVisible(tester, find.text('Entrar'));
       await tester.pump();
       expect(find.text('Escribe un correo válido'), findsOneWidget);
       expect(find.text('Mínimo 8 caracteres'), findsOneWidget);
@@ -128,10 +135,10 @@ void main() {
     testWidgets('el registro pide confirmar el correo y redirige a la app', (tester) async {
       final h = Harness()..supabase = (_) => http.Response(jsonEncode(user), 200);
       await tester.pumpWidget(h.app(FakeLock()));
-      await tester.tap(find.text('¿No tienes cuenta? Crear una'));
+      await tapVisible(tester, find.text('¿No tienes cuenta? Crear una'));
       await tester.pump();
       await fill(tester, 'a@test.co', 'clave-segura-1');
-      await tester.tap(find.text('Crear cuenta'));
+      await tapVisible(tester, find.text('Crear cuenta'));
       await tester.pumpAndSettle();
       expect(find.text('Revisa tu correo para confirmar la cuenta'), findsOneWidget);
       expect(h.requests.single.url.path, '/auth/v1/signup');
@@ -144,7 +151,7 @@ void main() {
             http.Response('{"code":400,"error_code":"email_not_confirmed","msg":"Email not confirmed"}', 400);
       await tester.pumpWidget(h.app(FakeLock()));
       await fill(tester, 'a@test.co', 'clave-segura-1');
-      await tester.tap(find.text('Entrar'));
+      await tapVisible(tester, find.text('Entrar'));
       await tester.pumpAndSettle();
       expect(find.text('Confirma tu correo antes de iniciar sesión'), findsOneWidget);
     });
@@ -154,7 +161,7 @@ void main() {
       final lock = FakeLock();
       await tester.pumpWidget(h.app(lock));
       await fill(tester, 'a@test.co', 'clave-segura-1');
-      await tester.tap(find.text('Entrar'));
+      await tapVisible(tester, find.text('Entrar'));
       await tester.pumpAndSettle();
       expect(homeShown, findsOneWidget);
       expect(lock.prompts, 0);
@@ -164,7 +171,7 @@ void main() {
   testWidgets('Continuar con Google abre Google con el enlace de vuelta a la app', (tester) async {
     final h = Harness();
     await tester.pumpWidget(h.app(FakeLock()));
-    await tester.tap(find.text('Continuar con Google'));
+    await tapVisible(tester, find.text('Continuar con Google'));
     await tester.pumpAndSettle();
     final url = h.opened.single;
     expect(url.path, '/auth/v1/authorize');

@@ -14,15 +14,32 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fsf_app/auth_screen.dart';
+import 'package:fsf_app/data_sources_screen.dart';
 import 'package:fsf_app/home_screen.dart';
+import 'package:fsf_app/launch_screen.dart';
+import 'package:fsf_app/theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show GoTrueClient;
 
 import 'support.dart';
 
 Map<String, dynamic> load(String name) =>
     jsonDecode(File('test/goldens/data/$name.json').readAsStringSync()) as Map<String, dynamic>;
 
-/// Las fuentes de Material que trae el SDK de Flutter: sin ellas el texto sale como cuadros.
+/// Las fuentes de la app (Inter y Unbounded, en assets/fonts) y los iconos de Material del SDK:
+/// sin ellas el texto sale como cuadros.
 Future<void> loadFonts() async {
+  Future<ByteData> asset(String path) async => ByteData.sublistView(await File(path).readAsBytes());
+  final inter = FontLoader('Inter');
+  for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+    inter.addFont(asset('assets/fonts/inter/Inter-$w.ttf'));
+  }
+  await inter.load();
+  final unbounded = FontLoader('Unbounded');
+  for (final w in ['Medium', 'Bold']) {
+    unbounded.addFont(asset('assets/fonts/unbounded/Unbounded-$w.ttf'));
+  }
+  await unbounded.load();
   final root =
       Platform.environment['FLUTTER_ROOT'] ??
       // flutter_tester vive en <flutter>/bin/cache/artifacts/engine/<plataforma>/
@@ -49,7 +66,22 @@ FakeBackend backend({Object? gps, Object? movements, String gmail = 'active'}) =
   'GET /pockets': (_) => demo['pockets'],
 });
 
-Future<void> shoot(WidgetTester tester, FakeBackend b, String name, {double scale = 1}) async {
+Future<void> shoot(WidgetTester tester, FakeBackend b, String name, {double scale = 1, bool tutorial = false}) async {
+  await shootWidget(
+    tester,
+    HomeScreen(
+      client: b.client,
+      token: 'demo',
+      onSignOut: () {},
+      links: const Stream.empty(),
+      now: () => now,
+      showTutorial: tutorial,
+    ),
+    scale: scale,
+  );
+}
+
+Future<void> shootWidget(WidgetTester tester, Widget screen, {double scale = 1, bool settle = true}) async {
   tester.view.physicalSize = const Size(1080, 2340); // teléfono típico (393×851 lógicos)
   tester.view.devicePixelRatio = 2.75;
   addTearDown(tester.view.reset);
@@ -59,19 +91,23 @@ Future<void> shoot(WidgetTester tester, FakeBackend b, String name, {double scal
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: fsfTheme(),
       home: MediaQuery(
         data: MediaQueryData(size: const Size(1080 / 2.75, 2340 / 2.75), textScaler: TextScaler.linear(scale)),
-        child: HomeScreen(
-          client: b.client,
-          token: 'demo',
-          onSignOut: () {},
-          links: const Stream.empty(),
-          now: () => now,
-        ),
+        child: screen,
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  // La barra del arranque es indefinida: nunca se asienta, se avanza un tiempo fijo.
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    // Las imágenes se decodifican fuera del reloj falso del test: se precargan de verdad.
+    await tester.runAsync(
+      () => precacheImage(const AssetImage('assets/images/logo.png'), tester.element(find.byWidget(screen))),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+  }
 }
 
 Future<void> golden(WidgetTester tester, String name) async {
@@ -129,5 +165,26 @@ void main() {
     await tester.tap(find.byTooltip('Bolsillos'));
     await tester.pumpAndSettle();
     await golden(tester, '6_bolsillos');
+  });
+
+  testWidgets('7 · arranque', (tester) async {
+    await shootWidget(tester, const LaunchScreen(), settle: false);
+    await golden(tester, '7_arranque');
+  });
+
+  testWidgets('8 · acceso', (tester) async {
+    final auth = GoTrueClient(url: 'http://supabase.test/auth/v1', autoRefreshToken: false);
+    await shootWidget(tester, AuthScreen(auth: auth));
+    await golden(tester, '8_acceso');
+  });
+
+  testWidgets('9 · tutorial «Primer vistazo»', (tester) async {
+    await shoot(tester, backend(), '9', tutorial: true);
+    await golden(tester, '9_tutorial');
+  });
+
+  testWidgets('10 · Fuentes de Datos', (tester) async {
+    await shootWidget(tester, DataSourcesScreen(status: () async => null, connect: () async {}));
+    await golden(tester, '10_fuentes_de_datos');
   });
 }

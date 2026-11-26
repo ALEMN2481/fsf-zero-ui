@@ -22,6 +22,36 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Ícono de la app (Android e iOS) desde el logo oficial con fondo blanco (D14):
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: assets/images/logo.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/logo.png
+  # Empaquetadas en la app (licencia SIL OFL 1.1, ver OFL.txt en cada carpeta): no se descargan.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/inter/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/inter/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/inter/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/inter/Inter-Bold.ttf
+          weight: 700
+    - family: Unbounded
+      fonts:
+        - asset: assets/fonts/unbounded/Unbounded-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/unbounded/Unbounded-Bold.ttf
+          weight: 700

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'budget_form.dart' show amountHint;
 import 'money.dart';
+import 'theme.dart';
 
 /// Bolsillos (CU-05): saldo y, si tiene meta, una barra de progreso plana (no es un gráfico).
 class PocketsScreen extends StatefulWidget {
@@ -18,10 +19,9 @@ class PocketsScreen extends StatefulWidget {
 }
 
 class _PocketsScreenState extends State<PocketsScreen> {
-  late Future<List<Map<String, dynamic>>> _pockets = _load();
+  late Future<Map<String, dynamic>> _pockets = _load();
 
-  Future<List<Map<String, dynamic>>> _load() async =>
-      ((await widget.api.get('/pockets')) as List).cast<Map<String, dynamic>>();
+  Future<Map<String, dynamic>> _load() async => (await widget.api.get('/pockets')) as Map<String, dynamic>;
 
   void _refresh() {
     setState(() {
@@ -34,40 +34,54 @@ class _PocketsScreenState extends State<PocketsScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) =>
-          Padding(padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom), child: sheet),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: sheet,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Bolsillos')),
+      appBar: AppBar(),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Crear bolsillo',
         onPressed: () => _open(CreatePocketSheet(api: widget.api, onChanged: _refresh)),
         child: const Icon(Icons.add),
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
+      body: FutureBuilder<Map<String, dynamic>>(
         future: _pockets,
         builder: (context, snap) {
           if (snap.hasError) return const Center(child: Text('No pudimos cargar tus bolsillos'));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final pockets = snap.data!;
-          if (pockets.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('Aparta dinero para una meta: toca + para crear tu primer bolsillo.'),
-            );
-          }
+          final pockets = (snap.data!['bolsillos'] as List).cast<Map<String, dynamic>>();
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            padding: const EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, 120),
             children: [
+              const Text('MIS BOLSILLOS', style: Fsf.etiqueta),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(formatCop(snap.data!['total'] as String), key: const Key('total'), style: Fsf.cifra),
+              ),
+              const SizedBox(height: 24),
+              const Text('Metas de ahorro', style: Fsf.tituloSeccion),
+              const SizedBox(height: 12),
+              if (pockets.isEmpty)
+                const Text(
+                  'Aparta dinero para una meta: toca + para crear tu primer bolsillo.',
+                  style: TextStyle(color: Fsf.textoSecundario),
+                ),
               for (final p in pockets)
-                PocketCard(
-                  pocket: p,
-                  onMove: (sign) => _open(
-                    MoveSheet(api: widget.api, pocketId: p['id'] as String, withdraw: sign < 0, onChanged: _refresh),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: PocketCard(
+                    pocket: p,
+                    onMove: (sign) => _open(
+                      MoveSheet(api: widget.api, pocketId: p['id'] as String, withdraw: sign < 0, onChanged: _refresh),
+                    ),
                   ),
                 ),
             ],
@@ -78,6 +92,7 @@ class _PocketsScreenState extends State<PocketsScreen> {
   }
 }
 
+/// Tarjeta de bolsillo: saldo, meta y avance (el % lo calcula el backend; D14).
 class PocketCard extends StatelessWidget {
   const PocketCard({super.key, required this.pocket, required this.onMove});
 
@@ -87,33 +102,49 @@ class PocketCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = pocket, balance = p['saldo'] as String, target = p['target_amount'] as String?;
-    final text = Theme.of(context).textTheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(p['name'] as String, style: text.titleMedium),
-            Text(formatCop(balance), style: text.headlineSmall),
-            if (target != null) ...[
-              const SizedBox(height: 8),
-              LinearProgressIndicator(
-                // Solo la proporción visual de la barra; las cifras se muestran como texto exacto.
-                value: (cents(balance) * BigInt.from(1000) ~/ cents(target)).toInt().clamp(0, 1000) / 1000,
-                semanticsLabel: '${formatCop(balance)} de ${formatCop(target)}',
+    final percent = p['porcentaje'] as int?;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(Fsf.margen, 20, Fsf.margen, 12),
+      decoration: const BoxDecoration(color: Fsf.superficie, borderRadius: BorderRadius.all(Radius.circular(20))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(p['name'] as String, style: Fsf.tarjeta.copyWith(fontWeight: FontWeight.w500)),
               ),
-              Text('de ${formatCop(target)}'),
+              if (percent != null)
+                Text('$percent %', style: Fsf.montoTarjeta.copyWith(color: Fsf.textoSecundarioEnSuperficie)),
             ],
-            Wrap(
-              spacing: 8,
-              children: [
-                TextButton(onPressed: () => onMove(1), child: const Text('Apartar')),
-                TextButton(onPressed: () => onMove(-1), child: const Text('Retirar')),
-              ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            children: [
+              Text(formatCop(balance), style: Fsf.montoTarjeta.copyWith(fontSize: 18)),
+              if (target != null) Text('meta: ${formatCop(target)}', style: Fsf.secundario.copyWith(fontSize: 14)),
+            ],
+          ),
+          if (percent != null) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percent.clamp(0, 100) / 100, // solo la barra; la cifra exacta va en texto
+              borderRadius: const BorderRadius.all(Radius.circular(4)),
+              semanticsLabel: '${formatCop(balance)} de ${formatCop(target!)}',
             ),
           ],
-        ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              TextButton(onPressed: () => onMove(1), child: const Text('Apartar')),
+              TextButton(onPressed: () => onMove(-1), child: const Text('Retirar')),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -139,7 +170,13 @@ class PocketCard extends StatelessWidget {
 
 /// Apartar o retirar: un campo.
 class MoveSheet extends StatefulWidget {
-  const MoveSheet({super.key, required this.api, required this.pocketId, required this.withdraw, required this.onChanged});
+  const MoveSheet({
+    super.key,
+    required this.api,
+    required this.pocketId,
+    required this.withdraw,
+    required this.onChanged,
+  });
 
   final Api api;
   final String pocketId;
@@ -168,9 +205,7 @@ class _MoveSheetState extends State<MoveSheet> {
     }
     setState(() => _busy = true);
     try {
-      await widget.api.post('/pockets/${widget.pocketId}/movements', {
-        'amount': widget.withdraw ? '-$amount' : amount,
-      });
+      await widget.api.post('/pockets/${widget.pocketId}/movements', {'amount': widget.withdraw ? '-$amount' : amount});
       widget.onChanged();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -200,7 +235,11 @@ class _MoveSheetState extends State<MoveSheet> {
               controller: _amount,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: 'Monto a ${verb.toLowerCase()}', prefixText: '\$ ', errorText: _error),
+              decoration: InputDecoration(
+                labelText: 'Monto a ${verb.toLowerCase()}',
+                prefixText: '\$ ',
+                errorText: _error,
+              ),
             ),
             const SizedBox(height: 16),
             if (_maximum != null)
@@ -244,7 +283,8 @@ class _CreatePocketSheetState extends State<CreatePocketSheet> {
     final name = _name.text.trim();
     final amount = amountOverride ?? (_amount.text.trim().isEmpty ? null : parseCopInput(_amount.text));
     final target = _withTarget && _target.text.trim().isNotEmpty ? parseCopInput(_target.text) : null;
-    if (name.isEmpty || (_amount.text.trim().isNotEmpty && amount == null) ||
+    if (name.isEmpty ||
+        (_amount.text.trim().isNotEmpty && amount == null) ||
         (_withTarget && _target.text.trim().isNotEmpty && target == null)) {
       setState(() => _error = name.isEmpty ? 'Ponle un nombre al bolsillo' : amountHint);
       return;
@@ -255,7 +295,8 @@ class _CreatePocketSheetState extends State<CreatePocketSheet> {
     });
     try {
       // Si el apartado falló antes por sobregiro, el bolsillo ya existe: no se crea dos veces.
-      _pocketId ??= ((await widget.api.post('/pockets', {'name': name, 'target_amount': ?target})) as Map)['id'] as String;
+      _pocketId ??=
+          ((await widget.api.post('/pockets', {'name': name, 'target_amount': ?target})) as Map)['id'] as String;
       if (amount != null) await widget.api.post('/pockets/$_pocketId/movements', {'amount': amount});
       widget.onChanged();
       if (mounted) Navigator.of(context).pop();

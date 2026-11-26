@@ -7,9 +7,12 @@ import 'package:http/http.dart' as http;
 import 'api.dart';
 import 'auth_screen.dart' show openInBrowser;
 import 'budget_form.dart';
+import 'data_sources_screen.dart';
 import 'money.dart';
 import 'movements.dart';
 import 'pockets_screen.dart';
+import 'theme.dart';
+import 'tutorial.dart';
 
 const emptyText = 'A la espera de tu primera captura automática';
 const loadError = 'No pudimos cargar tus datos';
@@ -26,6 +29,8 @@ class HomeScreen extends StatefulWidget {
     this.links,
     this.changes,
     this.now = DateTime.now,
+    this.showTutorial = false,
+    this.onTutorialDone,
   });
 
   final http.Client client;
@@ -39,6 +44,10 @@ class HomeScreen extends StatefulWidget {
   /// Aviso de que cambió un movimiento del usuario (Supabase Realtime); solo dispara el refresco.
   final Stream<void> Function()? changes;
   final DateTime Function() now;
+
+  /// Primer uso: el tutorial «Primer vistazo» se muestra encima cuando ya hay cifras (D14).
+  final bool showTutorial;
+  final VoidCallback? onTutorialDone;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -141,9 +150,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _openPockets() => Navigator.of(
-    context,
-  ).push(MaterialPageRoute<void>(builder: (_) => PocketsScreen(api: api, onChanged: _load)));
+  void _openSources() => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => DataSourcesScreen(
+        status: () async => ((await api.get('/me')) as Map<String, dynamic>)['gmail_status'] as String?,
+        connect: _connectGmail,
+      ),
+    ),
+  );
+
+  void _openPockets() => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => PocketsScreen(api: api, onChanged: _load),
+    ),
+  );
 
   void _openMovement(Map<String, dynamic> m) => showModalBottomSheet<void>(
     context: context,
@@ -153,6 +173,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final screen = _screen(context);
+    if (!widget.showTutorial || _gps?['estado'] != 'ok') return screen;
+    return Stack(
+      children: [
+        screen,
+        Positioned.fill(
+          child: TutorialOverlay(gps: _gps!, onDone: widget.onTutorialDone ?? () {}),
+        ),
+      ],
+    );
+  }
+
+  Widget _screen(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         actions: [
@@ -161,12 +194,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             tooltip: 'Más opciones',
             onSelected: (value) => switch (value) {
               'budget' => _openBudget(),
-              'gmail' => _connectGmail(),
+              'sources' => _openSources(),
               _ => widget.onSignOut(),
             },
             itemBuilder: (_) => [
               if (_gps?['estado'] == 'ok') const PopupMenuItem(value: 'budget', child: Text('Presupuesto')),
-              if (_me != null && !_gmailActive) const PopupMenuItem(value: 'gmail', child: Text('Conectar correo')),
+              const PopupMenuItem(value: 'sources', child: Text('Fuentes de datos')),
               const PopupMenuItem(value: 'signout', child: Text('Cerrar sesión')),
             ],
           ),
@@ -174,7 +207,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 24), children: _body(context)),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, Fsf.margen),
+          children: _body(context),
+        ),
       ),
     );
   }
@@ -193,8 +229,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return [
       ...DailySummary.lines(context, gps),
       const SizedBox(height: 32),
-      Text('Últimos movimientos', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 8),
+      const Text('Últimos movimientos', style: Fsf.tituloSeccion),
+      const SizedBox(height: 12),
       if (_movements.isEmpty) ..._empty(context),
       for (final m in _movements) MovementCard(movement: m, now: widget.now(), onTap: () => _openMovement(m)),
     ];
@@ -202,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   List<Widget> _empty(BuildContext context) => [
     const SizedBox(height: 24),
-    Text(emptyText, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+    const Text(emptyText, textAlign: TextAlign.center, style: Fsf.tarjeta),
     if (_me != null && _me!['gmail_status'] == 'needs_reconnect') ...[
       const SizedBox(height: 8),
       const Text('La conexión con Gmail se cayó', textAlign: TextAlign.center),
@@ -217,46 +253,78 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 /// La cifra grande y, debajo, pocas líneas. Textos neutrales: la app no juzga.
 class DailySummary {
   static List<Widget> lines(BuildContext context, Map<String, dynamic> g) {
-    final text = Theme.of(context).textTheme;
     final today = g['disponible_hoy'] as String, free = g['saldo_libre'] as String;
     final excess = g['exceso'] as String, review = g['en_revision'] as String;
     final days = g['dias_restantes'] as int;
     final tomorrow = g['diario_desde_manana'] as String?, plan = g['diario_plan'] as String?;
+    const line = TextStyle(fontSize: 15, color: Fsf.textoSecundario);
     return [
-      const SizedBox(height: 24),
-      Text(
-        isNegativeAmount(today) ? 'Hoy' : 'Hoy puedes gastar',
-        textAlign: TextAlign.center,
-        style: text.titleLarge,
-      ),
+      const SizedBox(height: 16),
+      Text(isNegativeAmount(today) ? 'HOY' : 'HOY PUEDES GASTAR', style: Fsf.etiqueta),
+      const SizedBox(height: 4),
+      // Unbounded es muy ancha: con el texto al 200 % la cifra se reduce, no desborda.
       FittedBox(
         fit: BoxFit.scaleDown,
-        child: Text(formatCop(today), key: const Key('disponible_hoy'), style: text.displayLarge),
+        alignment: Alignment.centerLeft,
+        child: Text(formatCop(today), key: const Key('disponible_hoy'), style: Fsf.cifra),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 12),
       if (isNegativeAmount(free))
         Text(
           'Este mes vas ${formatCop(absolute(free))} por encima de lo planeado. '
           'Tu diario queda en ${formatCop('0')} hasta el próximo mes.',
-          textAlign: TextAlign.center,
+          style: Fsf.tarjeta.copyWith(fontWeight: FontWeight.w500),
         )
       else ...[
-        if (isPositiveAmount(excess)) Text('Hoy fuiste ${formatCop(excess)} más allá de tu diario.', textAlign: TextAlign.center),
+        if (isPositiveAmount(excess))
+          Text(
+            'Hoy fuiste ${formatCop(excess)} más allá de tu diario.',
+            style: Fsf.tarjeta.copyWith(fontWeight: FontWeight.w500),
+          ),
         // Efecto GPS: solo cuando un gasto fuera de plan baja el diario de los días siguientes.
         if (isPositiveAmount(excess) && tomorrow != null && plan != null && cents(tomorrow) < cents(plan))
           Text(
             'Tu diario de mañana baja de ${formatCop(plan)} a ${formatCop(tomorrow)}.',
             key: const Key('gps'),
-            textAlign: TextAlign.center,
+            style: Fsf.tarjeta.copyWith(fontWeight: FontWeight.w500),
           ),
       ],
-      const SizedBox(height: 8),
-      Text('Esta semana ${formatCop(g['disponible_semana'] as String)}', textAlign: TextAlign.center),
-      Text(
-        'Libre este mes ${formatCop(free)} · ${days == 1 ? 'último día' : '$days días'}',
-        textAlign: TextAlign.center,
-      ),
-      if (isPositiveAmount(review)) Text('Incluye ${formatCop(review)} por confirmar', textAlign: TextAlign.center),
+      const SizedBox(height: 4),
+      Text('Esta semana ${formatCop(g['disponible_semana'] as String)}', style: line),
+      Text('Libre este mes ${formatCop(free)} · ${days == 1 ? 'último día' : '$days días'}', style: line),
+      if (isPositiveAmount(review)) Text('Incluye ${formatCop(review)} por confirmar', style: line),
+      if (g['reservado'] != null) ...[const SizedBox(height: 16), ReservedCard(amount: g['reservado'] as String)],
     ];
   }
+}
+
+/// «Reservado»: lo apartado en todos los bolsillos (cifra del backend, D14).
+class ReservedCard extends StatelessWidget {
+  const ReservedCard({super.key, required this.amount});
+
+  final String amount;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: const BoxDecoration(color: Fsf.superficie, borderRadius: BorderRadius.all(Radius.circular(20))),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.shield_outlined, size: 18, color: Fsf.textoSecundarioEnSuperficie),
+            SizedBox(width: 8),
+            Text('Reservado', style: TextStyle(fontSize: 14, color: Fsf.textoSecundarioEnSuperficie)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(formatCop(amount), key: const Key('reservado'), style: Fsf.montoTarjeta.copyWith(fontSize: 20)),
+        ),
+      ],
+    ),
+  );
 }

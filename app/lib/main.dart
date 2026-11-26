@@ -10,7 +10,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth_screen.dart';
 import 'home_screen.dart';
+import 'launch_screen.dart';
 import 'session_storage.dart';
+import 'theme.dart';
 
 // Se pasan con --dart-define-from-file=.env.json (ver env.example.json); la anon key es pública.
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
@@ -20,6 +22,7 @@ const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 const lockAfter = Duration(minutes: 5);
 const lockWarning = 'Activa un bloqueo de pantalla para proteger tu información';
 const _lockWarningShownKey = 'lock_warning_shown';
+const tutorialSeenKey = 'tutorial_seen';
 
 /// Textos del diálogo del sistema; sin ellos Android e iOS los muestran en inglés.
 const unlockMessages = <AuthMessages>[
@@ -33,6 +36,8 @@ const unlockMessages = <AuthMessages>[
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // El arranque se ve mientras se inicia Supabase (diseño «Launch»).
+  runApp(MaterialApp(debugShowCheckedModeBanner: false, theme: fsfTheme(), home: const LaunchScreen()));
   const storage = FlutterSecureStorage();
   const sessionStore = SecureSessionStorage(storage);
   await Supabase.initialize(
@@ -105,6 +110,9 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
   /// Capa que tapa la app fuera de primer plano: la miniatura de recientes no muestra datos.
   bool _covered = false;
 
+  /// Tutorial «Primer vistazo»: null mientras se lee del almacenamiento; se muestra una sola vez.
+  bool? _tutorialSeen;
+
   @override
   void initState() {
     super.initState();
@@ -115,6 +123,9 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
       if (state.event == AuthChangeEvent.signedIn) _warnIfUnprotected();
     });
     if (widget.auth.currentSession != null) _lock(); // al abrir la app con sesión guardada
+    widget.storage.containsKey(key: tutorialSeenKey).then((seen) {
+      if (mounted) setState(() => _tutorialSeen = seen);
+    });
   }
 
   @override
@@ -212,10 +223,16 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
         onSignOut: _signOut,
         openUrl: widget.openUrl,
         changes: widget.changesFor == null ? null : () => widget.changesFor!(session.user.id),
+        showTutorial: _tutorialSeen == false,
+        onTutorialDone: () {
+          widget.storage.write(key: tutorialSeenKey, value: '1');
+          setState(() => _tutorialSeen = true);
+        },
       );
     }
     return MaterialApp(
       title: 'Finanzas Sin Filtro',
+      theme: fsfTheme(),
       scaffoldMessengerKey: _messenger,
       home: home,
       builder: (context, child) => Stack(children: [child!, if (_covered) const PrivacyCover()]),
@@ -230,7 +247,10 @@ class PrivacyCover extends StatelessWidget {
   // Material: la capa está por encima del Navigator y, sin él, el texto sale con el estilo de
   // emergencia de Flutter (rojo, 48 px, subrayado amarillo).
   Widget build(BuildContext context) => const Positioned.fill(
-    child: Material(color: Colors.white, child: Center(child: Text('Finanzas Sin Filtro'))),
+    child: Material(
+      color: Colors.white,
+      child: Center(child: Text('Finanzas Sin Filtro')),
+    ),
   );
 }
 
