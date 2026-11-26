@@ -20,6 +20,7 @@ import 'package:fsf_app/coach_screen.dart';
 import 'package:fsf_app/data_sources_screen.dart';
 import 'package:fsf_app/home_screen.dart';
 import 'package:fsf_app/launch_screen.dart';
+import 'package:fsf_app/manual_expense.dart';
 import 'package:fsf_app/theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show GoTrueClient;
 
@@ -60,15 +61,16 @@ Future<void> loadFonts() async {
 final demo = load('demo'), over = load('demo_over'), coach = load('coach');
 final now = DateTime.utc(2026, 11, 25, 22); // 17:00 en Colombia, como cuando se tomaron los datos
 
-FakeBackend backend({Object? gps, Object? movements, String gmail = 'active'}) => FakeBackend({
-  'GET /gps': (_) => gps ?? demo['gps'],
-  'GET /movements': (_) => movements ?? demo['movements'],
-  'GET /me': (_) => {'id': 'demo', 'gmail_status': gmail},
-  'GET /categories': (_) => demo['categories'],
-  'GET /budgets/suggestion': (_) => demo['suggestion'],
-  'GET /pockets': (_) => demo['pockets'],
-  'GET /coach/messages': (_) => coach['messages'],
-});
+FakeBackend backend({Object? gps, Object? movements, String gmail = 'active', String name = 'Sofía Ejemplo'}) =>
+    FakeBackend({
+      'GET /gps': (_) => gps ?? demo['gps'],
+      'GET /movements': (_) => movements ?? demo['movements'],
+      'GET /me': (_) => {'id': 'demo', 'gmail_status': gmail, 'display_name': name},
+      'GET /categories': (_) => demo['categories'],
+      'GET /budgets/suggestion': (_) => demo['suggestion'],
+      'GET /pockets': (_) => demo['pockets'],
+      'GET /coach/messages': (_) => coach['messages'],
+    });
 
 Future<void> shoot(WidgetTester tester, FakeBackend b, String name, {double scale = 1, bool tutorial = false}) async {
   await shootWidget(
@@ -239,5 +241,29 @@ void main() {
     ];
     await shoot(tester, backend(movements: movements), '14');
     await golden(tester, '14_pregunta_categoria');
+  });
+
+  // Paso 15B: cabecera con nombre largo y gasto en efectivo a mano (3 pasos).
+  testWidgets('15 · cabecera con un nombre largo al 200 %', (tester) async {
+    await shoot(tester, backend(name: 'María Fernanda de los Ángeles Restrepo'), '15', scale: 2);
+    await golden(tester, '15_cabecera_nombre_largo_200');
+  });
+
+  testWidgets('16 · gasto a mano: monto, categoría y comercio', (tester) async {
+    final b = backend();
+    await shootWidget(tester, ManualExpenseScreen(api: Api(b.client, 'demo')));
+    await tester.enterText(find.byKey(const Key('monto')), '12500');
+    await tester.pumpAndSettle();
+    await golden(tester, '16a_gasto_manual_monto');
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alimentos'));
+    await tester.pumpAndSettle();
+    await golden(tester, '16b_gasto_manual_categoria');
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('comercio')), 'PANADERIA DEL BARRIO');
+    await tester.pumpAndSettle();
+    await golden(tester, '16c_gasto_manual_comercio');
   });
 }

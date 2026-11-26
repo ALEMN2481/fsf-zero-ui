@@ -1,281 +1,311 @@
 {
- "gps": {
-  "estado": "ok",
-  "hoy": "2026-11-25",
-  "periodo": {
-   "inicio": "2026-11-01",
-   "fin": "2026-11-30",
-   "presupuesto": "3000000.00",
-   "renovado": false
+  "gps": {
+    "estado": "ok",
+    "hoy": "2026-11-25",
+    "periodo": {
+      "inicio": "2026-11-01",
+      "fin": "2026-11-30",
+      "presupuesto": "3000000.00",
+      "renovado": false
+    },
+    "dias_restantes": 6,
+    "saldo_libre": "1902250.00",
+    "gasto_periodo": "747750.00",
+    "apartado_periodo": "350000.00",
+    "ingresos_periodo": "2580000.00",
+    "en_revision": "61250.00",
+    "cuota_hoy": "309391.00",
+    "gastado_hoy": "-45900.00",
+    "disponible_hoy": "355291.00",
+    "exceso": "0.00",
+    "diario_plan": "309391.00",
+    "diario_desde_manana": "380450.00",
+    "disponible_semana": "1592855.00",
+    "maximo_apartable": "1902250.00",
+    "por_categoria": [
+      {
+        "categoria": "Alimentos",
+        "gasto": "41500.00",
+        "efectivo_factura": "41500.00"
+      },
+      {
+        "categoria": "Otros",
+        "gasto": "519050.00",
+        "efectivo_factura": "0.00"
+      },
+      {
+        "categoria": "Salud",
+        "gasto": "12000.00",
+        "efectivo_factura": "0.00"
+      },
+      {
+        "categoria": "Servicios",
+        "gasto": "175200.00",
+        "efectivo_factura": "0.00"
+      }
+    ],
+    "reservado": "350000.00",
+    "semana_dias": [
+      {
+        "fecha": "2026-11-23",
+        "gastado": "123500.00"
+      },
+      {
+        "fecha": "2026-11-24",
+        "gastado": "71700.00"
+      },
+      {
+        "fecha": "2026-11-25",
+        "gastado": "0.00"
+      },
+      {
+        "fecha": "2026-11-26",
+        "gastado": "0.00"
+      },
+      {
+        "fecha": "2026-11-27",
+        "gastado": "0.00"
+      },
+      {
+        "fecha": "2026-11-28",
+        "gastado": "0.00"
+      },
+      {
+        "fecha": "2026-11-29",
+        "gastado": "0.00"
+      }
+    ]
   },
-  "dias_restantes": 6,
-  "saldo_libre": "1902250.00",
-  "gasto_periodo": "747750.00",
-  "apartado_periodo": "350000.00",
-  "ingresos_periodo": "2580000.00",
-  "en_revision": "61250.00",
-  "cuota_hoy": "309391.00",
-  "gastado_hoy": "-45900.00",
-  "disponible_hoy": "355291.00",
-  "exceso": "0.00",
-  "diario_plan": "309391.00",
-  "diario_desde_manana": "380450.00",
-  "disponible_semana": "1592855.00",
-  "maximo_apartable": "1902250.00",
-  "por_categoria": [
-   {
-    "categoria": "Alimentos",
-    "gasto": "41500.00",
-    "efectivo_factura": "41500.00"
-   },
-   {
-    "categoria": "Otros",
-    "gasto": "519050.00",
-    "efectivo_factura": "0.00"
-   },
-   {
-    "categoria": "Salud",
-    "gasto": "12000.00",
-    "efectivo_factura": "0.00"
-   },
-   {
-    "categoria": "Servicios",
-    "gasto": "175200.00",
-    "efectivo_factura": "0.00"
-   }
+  "movements": [
+    {
+      "id": "b3659036-0e4d-40cd-a65c-eb8e3908f9ba",
+      "monto": "45900.00",
+      "direccion": "income",
+      "estado": "confirmed",
+      "comercio": "SUPERMERCADO EJEMPLO SAS",
+      "fecha": "2026-11-25T14:00:00+00:00",
+      "categoria": "Alimentos",
+      "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
+      "tipo": "devolucion"
+    },
+    {
+      "id": "c533547a-2879-4682-8a0d-8ec17e065c40",
+      "monto": "7800.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "TIENDA DE BARRIO EJEMPLO",
+      "fecha": "2026-11-25T00:02:00+00:00",
+      "categoria": "Otros",
+      "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
+      "tipo": "gasto"
+    },
+    {
+      "id": "841b8403-813f-4d1f-afc8-389634f30ac4",
+      "monto": "18000.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "CAFETERIA EJEMPLO",
+      "fecha": "2026-11-24T18:30:00+00:00",
+      "categoria": "Alimentos",
+      "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
+      "tipo": "gasto"
+    },
+    {
+      "id": "9e176367-fb4c-4223-a8db-5c488b034024",
+      "monto": "45900.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "SUPERMERCADO EJEMPLO SAS",
+      "fecha": "2026-11-24T15:23:00+00:00",
+      "categoria": "Alimentos",
+      "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
+      "tipo": "gasto"
+    },
+    {
+      "id": "313ece14-7be9-4199-b935-b4bcc833d03a",
+      "monto": "9500.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "CAFE EJEMPLO SAS",
+      "fecha": "2026-11-24T13:15:00+00:00",
+      "categoria": "Alimentos",
+      "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
+      "tipo": "efectivo_factura"
+    },
+    {
+      "id": "678855ae-4b43-4088-8210-002d1c38c5ae",
+      "monto": "100000.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "CAJERO EJEMPLO NORTE",
+      "fecha": "2026-11-24T00:00:00+00:00",
+      "categoria": "Otros",
+      "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
+      "tipo": "gasto"
+    },
+    {
+      "id": "a8a3ba19-0183-416a-884b-b8678f2a8168",
+      "monto": "32000.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "RESTAURANTE EJEMPLO SAS",
+      "fecha": "2026-11-23T18:05:10+00:00",
+      "categoria": "Alimentos",
+      "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
+      "tipo": "efectivo_factura"
+    },
+    {
+      "id": "fe912413-f3b1-4c9e-b359-bf6c0629ba74",
+      "monto": "23500.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "PANADERIA EJEMPLO",
+      "fecha": "2026-11-23T12:45:00+00:00",
+      "categoria": "Alimentos",
+      "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
+      "tipo": "gasto"
+    },
+    {
+      "id": "1fe0dc4b-ed01-451c-af80-a75948e69b1b",
+      "monto": "12000.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "DROGUERIA EJEMPLO",
+      "fecha": "2026-11-22T23:10:00+00:00",
+      "categoria": "Salud",
+      "categoria_id": "e3b04ec2-a575-4aa5-aef2-f66f1ac9a67c",
+      "tipo": "gasto"
+    },
+    {
+      "id": "9168763b-b67d-4e3e-ad73-1d38e1e6ebae",
+      "monto": "61250.00",
+      "direccion": "expense",
+      "estado": "pending_review",
+      "comercio": "FERRETERIA EJEMPLO SAS",
+      "fecha": "2026-11-22T21:40:00+00:00",
+      "categoria": "Otros",
+      "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
+      "tipo": "gasto"
+    },
+    {
+      "id": "27c947dd-b783-4602-a256-711370df78c4",
+      "monto": "200000.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "CAJERO EJEMPLO CENTRO",
+      "fecha": "2026-11-21T20:42:00+00:00",
+      "categoria": "Otros",
+      "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
+      "tipo": "gasto"
+    },
+    {
+      "id": "41942a9c-03e6-47dc-9668-f2748790ad5c",
+      "monto": "150000.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": null,
+      "fecha": "2026-11-21T14:15:00+00:00",
+      "categoria": "Otros",
+      "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
+      "tipo": "gasto"
+    },
+    {
+      "id": "67b21b05-bd61-4408-8abe-def5982167da",
+      "monto": "80000.00",
+      "direccion": "income",
+      "estado": "confirmed",
+      "comercio": "PERSONA EJEMPLO",
+      "fecha": "2026-11-20T01:31:00+00:00",
+      "categoria": "Ingresos",
+      "categoria_id": "03326257-808c-47e4-851c-e46b6e958460",
+      "tipo": "ingreso"
+    },
+    {
+      "id": "e655c1a9-5d1b-4383-9275-c8da030b5563",
+      "monto": "95300.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "EMPRESA DE ENERGIA EJEMPLO",
+      "fecha": "2026-11-18T16:05:00+00:00",
+      "categoria": "Servicios",
+      "categoria_id": "8af274ec-52d5-43f1-b5d2-26eaa5f2b9cb",
+      "tipo": "gasto"
+    },
+    {
+      "id": "86ae4325-ed8d-4272-8029-db1f982700e1",
+      "monto": "79900.00",
+      "direccion": "expense",
+      "estado": "confirmed",
+      "comercio": "INTERNET EJEMPLO",
+      "fecha": "2026-11-17T13:00:00+00:00",
+      "categoria": "Servicios",
+      "categoria_id": "8af274ec-52d5-43f1-b5d2-26eaa5f2b9cb",
+      "tipo": "gasto"
+    },
+    {
+      "id": "aabd9eb2-354c-4a3b-bacf-9ef8847f3f5f",
+      "monto": "2500000.00",
+      "direccion": "income",
+      "estado": "confirmed",
+      "comercio": "EMPRESA EMPLEADORA EJEMPLO SAS",
+      "fecha": "2026-11-15T11:00:00+00:00",
+      "categoria": "Ingresos",
+      "categoria_id": "03326257-808c-47e4-851c-e46b6e958460",
+      "tipo": "ingreso"
+    }
   ],
-  "reservado": "350000.00"
- },
- "movements": [
-  {
-   "id": "b3659036-0e4d-40cd-a65c-eb8e3908f9ba",
-   "monto": "45900.00",
-   "direccion": "income",
-   "estado": "confirmed",
-   "comercio": "SUPERMERCADO EJEMPLO SAS",
-   "fecha": "2026-11-25T14:00:00+00:00",
-   "categoria": "Alimentos",
-   "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
-   "tipo": "devolucion"
+  "categories": [
+    {
+      "id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
+      "name": "Alimentos",
+      "user_id": null
+    },
+    {
+      "id": "12042e10-3d78-45c7-800e-6e28947c6afc",
+      "name": "Entretenimiento",
+      "user_id": null
+    },
+    {
+      "id": "03326257-808c-47e4-851c-e46b6e958460",
+      "name": "Ingresos",
+      "user_id": null
+    },
+    {
+      "id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
+      "name": "Otros",
+      "user_id": null
+    },
+    {
+      "id": "e3b04ec2-a575-4aa5-aef2-f66f1ac9a67c",
+      "name": "Salud",
+      "user_id": null
+    },
+    {
+      "id": "8af274ec-52d5-43f1-b5d2-26eaa5f2b9cb",
+      "name": "Servicios",
+      "user_id": null
+    },
+    {
+      "id": "29ecfa73-65be-448e-b81f-97a808ea99cd",
+      "name": "Transporte",
+      "user_id": null
+    }
+  ],
+  "pockets": {
+    "total": "350000.00",
+    "bolsillos": [
+      {
+        "id": "b3b1e2da-6852-42e5-9fdb-e8eda11ffe02",
+        "name": "Viaje",
+        "target_amount": "1000000.00",
+        "saldo": "350000.00",
+        "porcentaje": 35
+      }
+    ]
   },
-  {
-   "id": "c533547a-2879-4682-8a0d-8ec17e065c40",
-   "monto": "7800.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "TIENDA DE BARRIO EJEMPLO",
-   "fecha": "2026-11-25T00:02:00+00:00",
-   "categoria": "Otros",
-   "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
-   "tipo": "gasto"
-  },
-  {
-   "id": "841b8403-813f-4d1f-afc8-389634f30ac4",
-   "monto": "18000.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "CAFETERIA EJEMPLO",
-   "fecha": "2026-11-24T18:30:00+00:00",
-   "categoria": "Alimentos",
-   "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
-   "tipo": "gasto"
-  },
-  {
-   "id": "9e176367-fb4c-4223-a8db-5c488b034024",
-   "monto": "45900.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "SUPERMERCADO EJEMPLO SAS",
-   "fecha": "2026-11-24T15:23:00+00:00",
-   "categoria": "Alimentos",
-   "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
-   "tipo": "gasto"
-  },
-  {
-   "id": "313ece14-7be9-4199-b935-b4bcc833d03a",
-   "monto": "9500.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "CAFE EJEMPLO SAS",
-   "fecha": "2026-11-24T13:15:00+00:00",
-   "categoria": "Alimentos",
-   "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
-   "tipo": "efectivo_factura"
-  },
-  {
-   "id": "678855ae-4b43-4088-8210-002d1c38c5ae",
-   "monto": "100000.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "CAJERO EJEMPLO NORTE",
-   "fecha": "2026-11-24T00:00:00+00:00",
-   "categoria": "Otros",
-   "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
-   "tipo": "gasto"
-  },
-  {
-   "id": "a8a3ba19-0183-416a-884b-b8678f2a8168",
-   "monto": "32000.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "RESTAURANTE EJEMPLO SAS",
-   "fecha": "2026-11-23T18:05:10+00:00",
-   "categoria": "Alimentos",
-   "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
-   "tipo": "efectivo_factura"
-  },
-  {
-   "id": "fe912413-f3b1-4c9e-b359-bf6c0629ba74",
-   "monto": "23500.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "PANADERIA EJEMPLO",
-   "fecha": "2026-11-23T12:45:00+00:00",
-   "categoria": "Alimentos",
-   "categoria_id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
-   "tipo": "gasto"
-  },
-  {
-   "id": "1fe0dc4b-ed01-451c-af80-a75948e69b1b",
-   "monto": "12000.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "DROGUERIA EJEMPLO",
-   "fecha": "2026-11-22T23:10:00+00:00",
-   "categoria": "Salud",
-   "categoria_id": "e3b04ec2-a575-4aa5-aef2-f66f1ac9a67c",
-   "tipo": "gasto"
-  },
-  {
-   "id": "9168763b-b67d-4e3e-ad73-1d38e1e6ebae",
-   "monto": "61250.00",
-   "direccion": "expense",
-   "estado": "pending_review",
-   "comercio": "FERRETERIA EJEMPLO SAS",
-   "fecha": "2026-11-22T21:40:00+00:00",
-   "categoria": "Otros",
-   "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
-   "tipo": "gasto"
-  },
-  {
-   "id": "27c947dd-b783-4602-a256-711370df78c4",
-   "monto": "200000.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "CAJERO EJEMPLO CENTRO",
-   "fecha": "2026-11-21T20:42:00+00:00",
-   "categoria": "Otros",
-   "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
-   "tipo": "gasto"
-  },
-  {
-   "id": "41942a9c-03e6-47dc-9668-f2748790ad5c",
-   "monto": "150000.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": null,
-   "fecha": "2026-11-21T14:15:00+00:00",
-   "categoria": "Otros",
-   "categoria_id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
-   "tipo": "gasto"
-  },
-  {
-   "id": "67b21b05-bd61-4408-8abe-def5982167da",
-   "monto": "80000.00",
-   "direccion": "income",
-   "estado": "confirmed",
-   "comercio": "PERSONA EJEMPLO",
-   "fecha": "2026-11-20T01:31:00+00:00",
-   "categoria": "Ingresos",
-   "categoria_id": "03326257-808c-47e4-851c-e46b6e958460",
-   "tipo": "ingreso"
-  },
-  {
-   "id": "e655c1a9-5d1b-4383-9275-c8da030b5563",
-   "monto": "95300.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "EMPRESA DE ENERGIA EJEMPLO",
-   "fecha": "2026-11-18T16:05:00+00:00",
-   "categoria": "Servicios",
-   "categoria_id": "8af274ec-52d5-43f1-b5d2-26eaa5f2b9cb",
-   "tipo": "gasto"
-  },
-  {
-   "id": "86ae4325-ed8d-4272-8029-db1f982700e1",
-   "monto": "79900.00",
-   "direccion": "expense",
-   "estado": "confirmed",
-   "comercio": "INTERNET EJEMPLO",
-   "fecha": "2026-11-17T13:00:00+00:00",
-   "categoria": "Servicios",
-   "categoria_id": "8af274ec-52d5-43f1-b5d2-26eaa5f2b9cb",
-   "tipo": "gasto"
-  },
-  {
-   "id": "aabd9eb2-354c-4a3b-bacf-9ef8847f3f5f",
-   "monto": "2500000.00",
-   "direccion": "income",
-   "estado": "confirmed",
-   "comercio": "EMPRESA EMPLEADORA EJEMPLO SAS",
-   "fecha": "2026-11-15T11:00:00+00:00",
-   "categoria": "Ingresos",
-   "categoria_id": "03326257-808c-47e4-851c-e46b6e958460",
-   "tipo": "ingreso"
+  "suggestion": {
+    "gasto_mes_anterior": "747750.00",
+    "ingresos_mes_anterior": "2580000.00",
+    "sugerido": "747750.00"
   }
- ],
- "categories": [
-  {
-   "id": "b91b49b2-35c9-4c98-9167-29023dfadeea",
-   "name": "Alimentos",
-   "user_id": null
-  },
-  {
-   "id": "12042e10-3d78-45c7-800e-6e28947c6afc",
-   "name": "Entretenimiento",
-   "user_id": null
-  },
-  {
-   "id": "03326257-808c-47e4-851c-e46b6e958460",
-   "name": "Ingresos",
-   "user_id": null
-  },
-  {
-   "id": "28fec6d6-b7c6-474f-9a9f-ec0658f1e139",
-   "name": "Otros",
-   "user_id": null
-  },
-  {
-   "id": "e3b04ec2-a575-4aa5-aef2-f66f1ac9a67c",
-   "name": "Salud",
-   "user_id": null
-  },
-  {
-   "id": "8af274ec-52d5-43f1-b5d2-26eaa5f2b9cb",
-   "name": "Servicios",
-   "user_id": null
-  },
-  {
-   "id": "29ecfa73-65be-448e-b81f-97a808ea99cd",
-   "name": "Transporte",
-   "user_id": null
-  }
- ],
- "pockets": {
-  "total": "350000.00",
-  "bolsillos": [
-   {
-    "id": "b3b1e2da-6852-42e5-9fdb-e8eda11ffe02",
-    "name": "Viaje",
-    "target_amount": "1000000.00",
-    "saldo": "350000.00",
-    "porcentaje": 35
-   }
-  ]
- },
- "suggestion": {
-  "gasto_mes_anterior": "747750.00",
-  "ingresos_mes_anterior": "2580000.00",
-  "sugerido": "747750.00"
- }
 }

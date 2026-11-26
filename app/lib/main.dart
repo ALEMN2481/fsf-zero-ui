@@ -239,6 +239,7 @@ class _FsfAppState extends State<FsfApp> with WidgetsBindingObserver {
         client: widget.client,
         token: session.accessToken,
         onSignOut: _signOut,
+        email: session.user.email,
         openUrl: widget.openUrl,
         changes: widget.changesFor == null ? null : () => widget.changesFor!(session.user.id),
         showTutorial: _tutorialSeen == false,

@@ -22,6 +22,38 @@ String dateLabel(String iso, DateTime now) {
 }
 
 /// Monto con su signo según el tipo del motor: los que no cuentan en el presupuesto, sin signo.
+const _weekdays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+/// Título del grupo de movimientos de un día (Paso 15B): «Hoy», «Ayer», «Lunes 24» y, si es de
+/// otro mes, «Viernes 31 oct». En hora de Colombia.
+String dayLabel(String iso, DateTime now) {
+  final t = bogota(DateTime.parse(iso)), today = bogota(now);
+  final day = DateTime.utc(t.year, t.month, t.day), current = DateTime.utc(today.year, today.month, today.day);
+  final diff = current.difference(day).inDays;
+  if (diff == 0) return 'Hoy';
+  if (diff == 1) return 'Ayer';
+  final label = '${_weekdays[t.weekday - 1]} ${t.day}';
+  return t.month == today.month && t.year == today.year ? label : '$label ${_months[t.month - 1]}';
+}
+
+/// "07:45", en hora de Colombia (dentro de un grupo por día).
+String timeLabel(String iso) {
+  final t = bogota(DateTime.parse(iso));
+  return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+}
+
+/// Icono de cada categoría (sin emojis, D14); las propias del usuario llevan uno genérico.
+IconData categoryIcon(String? name) => switch (name) {
+  'Alimentos' => Icons.restaurant_outlined,
+  'Transporte' => Icons.directions_bus_outlined,
+  'Entretenimiento' => Icons.movie_outlined,
+  'Salud' => Icons.local_hospital_outlined,
+  'Servicios' => Icons.receipt_long_outlined,
+  'Ingresos' => Icons.payments_outlined,
+  'Otros' => Icons.category_outlined,
+  _ => Icons.label_outline,
+};
+
 String signedAmount(Map<String, dynamic> m) {
   final amount = m['monto'] as String;
   return switch (m['tipo']) {
@@ -42,11 +74,14 @@ String title(Map<String, dynamic> m) =>
     (m['comercio'] as String?) ?? (m['direccion'] == 'income' ? 'Ingreso' : 'Transferencia');
 
 class MovementCard extends StatelessWidget {
-  const MovementCard({super.key, required this.movement, required this.now, required this.onTap});
+  const MovementCard({super.key, required this.movement, required this.now, required this.onTap, this.grouped = false});
 
   final Map<String, dynamic> movement;
   final DateTime now;
   final VoidCallback onTap;
+
+  /// Dentro de un grupo por día: solo la hora (el día ya está en el título del grupo).
+  final bool grouped;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +98,17 @@ class MovementCard extends StatelessWidget {
       ],
     );
     final amount = Text(signedAmount(m), style: Fsf.montoTarjeta);
-    final date = Text(dateLabel(m['fecha'] as String, now), style: Fsf.secundario);
+    final fecha = m['fecha'] as String;
+    final date = Text(grouped ? timeLabel(fecha) : dateLabel(fecha, now), style: Fsf.secundario);
+    // Icono de la categoría en un cuadro gris (Paso 15B).
+    final icon = ExcludeSemantics(
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: const BoxDecoration(color: Fsf.borde, borderRadius: BorderRadius.all(Radius.circular(12))),
+        child: Icon(categoryIcon(m['categoria'] as String?), size: 22, color: Fsf.texto),
+      ),
+    );
     // Con el texto grande no caben dos columnas: el monto va debajo, sin partir el comercio.
     final large = MediaQuery.textScalerOf(context).scale(16) > 16 * 1.4;
     return Card(
@@ -80,6 +125,8 @@ class MovementCard extends StatelessWidget {
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    icon,
+                    const SizedBox(width: 12),
                     Expanded(child: info),
                     const SizedBox(width: 12),
                     Column(

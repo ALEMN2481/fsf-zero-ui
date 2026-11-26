@@ -9,12 +9,14 @@ import 'auth_screen.dart' show openInBrowser;
 import 'budget_form.dart';
 import 'coach_screen.dart';
 import 'data_sources_screen.dart';
+import 'manual_expense.dart';
 import 'money.dart';
 import 'movements.dart';
 import 'pockets_screen.dart';
 import 'push.dart';
 import 'theme.dart';
 import 'tutorial.dart';
+import 'week_bars.dart';
 
 const emptyText = 'A la espera de tu primera captura automática';
 const loadError = 'No pudimos cargar tus datos';
@@ -36,6 +38,7 @@ class HomeScreen extends StatefulWidget {
     this.push,
     this.askPush = false,
     this.onPushAsked,
+    this.email,
   });
 
   final http.Client client;
@@ -60,6 +63,9 @@ class HomeScreen extends StatefulWidget {
   /// Primer uso: tras el tutorial se explica para qué son los avisos y se pide el permiso una vez.
   final bool askPush;
   final VoidCallback? onPushAsked;
+
+  /// Correo de la sesión: la cabecera lo muestra si el perfil no tiene nombre (Paso 15B).
+  final String? email;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -310,6 +316,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     ),
   );
 
+  /// Gasto en efectivo a mano (Paso 15B): al volver, refresca y dice si descontó o no.
+  Future<void> _addExpense() async {
+    final message = await Navigator.of(context)
+        .push<String>(MaterialPageRoute(builder: (_) => ManualExpenseScreen(api: api)));
+    if (message == null || !mounted) return;
+    _load();
+    _notice(message);
+  }
+
   void _openCoach() => Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => CoachScreen(api: api, now: widget.now),
@@ -343,39 +358,46 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       children: [
         screen,
         Positioned.fill(
-          child: TutorialOverlay(gps: _gps!, onDone: widget.onTutorialDone ?? () {}),
+          child: TutorialOverlay(gps: _gps!, onDone: widget.onTutorialDone ?? () {}, now: widget.now),
         ),
       ],
     );
   }
 
   Widget _screen(BuildContext context) {
+    final name = (_me?['display_name'] as String?)?.trim();
     return Scaffold(
       appBar: AppBar(
-        actions: [
-          IconButton(tooltip: 'Bolsillos', icon: const Icon(Icons.savings_outlined), onPressed: _openPockets),
-          PopupMenuButton<String>(
-            tooltip: 'Más opciones',
+        automaticallyImplyLeading: false,
+        toolbarHeight: 72,
+        titleSpacing: Fsf.margen,
+        title: HomeHeader(
+          name: name != null && name.isNotEmpty ? name : (widget.email ?? ''),
+          onCoach: _loading || _failed ? null : _openCoach,
+          onPockets: _openPockets,
+          menu: PopupMenuButton<String>(
+            tooltip: 'Ajustes',
+            icon: const Icon(Icons.settings_outlined),
             onSelected: (value) => switch (value) {
               'budget' => _openBudget(),
               'sources' => _openSources(),
               _ => _signOut(),
             },
             itemBuilder: (_) => [
-              if (_gps?['estado'] == 'ok') const PopupMenuItem(value: 'budget', child: Text('Presupuesto')),
               const PopupMenuItem(value: 'sources', child: Text('Fuentes de datos')),
+              if (_gps?['estado'] == 'ok') const PopupMenuItem(value: 'budget', child: Text('Presupuesto')),
               const PopupMenuItem(value: 'signout', child: Text('Cerrar sesión')),
             ],
           ),
-        ],
+        ),
       ),
-      floatingActionButton: _loading || _failed
+      floatingActionButton: _loading || _failed || _gps?['estado'] != 'ok'
           ? null
           : FloatingActionButton(
-              tooltip: 'Abrir el Coach',
+              tooltip: 'Agregar gasto',
               shape: const CircleBorder(),
-              onPressed: _openCoach,
-              child: const Icon(Icons.auto_awesome),
+              onPressed: _addExpense,
+              child: const Icon(Icons.add),
             ),
       body: RefreshIndicator(
         onRefresh: _load,
@@ -399,13 +421,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     final gps = _gps!;
     if (gps['estado'] != 'ok') return [BudgetForm(api: api, onSaved: _load)];
+    final week = (gps['semana_dias'] as List?)?.cast<Map<String, dynamic>>();
+    final now = widget.now();
+    String? group;
     return [
       ...DailySummary.lines(context, gps),
+      if (week != null && week.length == 7) ...[
+        const SizedBox(height: 32),
+        const Text('Gasto de la semana', style: Fsf.tituloSeccion),
+        const SizedBox(height: 12),
+        WeekBars(days: week, now: now),
+      ],
       const SizedBox(height: 32),
       const Text('Últimos movimientos', style: Fsf.tituloSeccion),
-      const SizedBox(height: 12),
       if (_movements.isEmpty) ..._empty(context),
-      for (final m in _movements) MovementCard(movement: m, now: widget.now(), onTap: () => _openMovement(m)),
+      // Agrupados por día, en hora de Colombia: «Hoy», «Ayer», «Lunes 24».
+      for (final m in _movements) ...[
+        if (dayLabel(m['fecha'] as String, now) != group) ...[
+          const SizedBox(height: 16),
+          Semantics(header: true, child: Text(group = dayLabel(m['fecha'] as String, now), style: Fsf.etiqueta)),
+          const SizedBox(height: 8),
+        ],
+        MovementCard(movement: m, now: now, grouped: true, onTap: () => _openMovement(m)),
+      ],
     ];
   }
 
@@ -421,6 +459,69 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       FilledButton(onPressed: _connecting ? null : _connectGmail, child: const Text('Conectar correo')),
     ],
   ];
+}
+
+/// Cabecera (Paso 15B, tokens.md): a la izquierda una burbuja con el nombre o el correo; a la
+/// derecha una burbuja con el Coach, los bolsillos y los ajustes. Sin búsqueda, filtro ni cuentas.
+class HomeHeader extends StatelessWidget {
+  const HomeHeader({super.key, required this.name, required this.onCoach, required this.onPockets, required this.menu});
+
+  final String name;
+  final VoidCallback? onCoach;
+  final VoidCallback onPockets;
+  final Widget menu;
+
+  static const _bubble = BoxDecoration(color: Fsf.superficie, borderRadius: BorderRadius.all(Radius.circular(28)));
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Flexible(
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.only(left: 6, right: 16),
+          decoration: _bubble,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ExcludeSemantics(
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Fsf.primario,
+                  child: Text(
+                    name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                    style: const TextStyle(color: Fsf.sobrePrimario, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  name,
+                  key: const Key('cabecera_nombre'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Fsf.tarjeta.copyWith(fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Container(
+        decoration: _bubble,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(tooltip: 'Abrir el Coach', icon: const Icon(Icons.auto_awesome), onPressed: onCoach),
+            IconButton(tooltip: 'Bolsillos', icon: const Icon(Icons.savings_outlined), onPressed: onPockets),
+            menu,
+          ],
+        ),
+      ),
+    ],
+  );
 }
 
 /// La cifra grande y, debajo, pocas líneas. Textos neutrales: la app no juzga.
@@ -463,8 +564,8 @@ class DailySummary {
           ),
       ],
       const SizedBox(height: 4),
-      Text('Esta semana ${formatCop(g['disponible_semana'] as String)}', style: line),
-      Text('Libre este mes ${formatCop(free)} · ${days == 1 ? 'último día' : '$days días'}', style: line),
+      Text('Te quedan esta semana ${formatCop(g['disponible_semana'] as String)}', style: line),
+      Text('Te quedan este mes ${formatCop(free)} · ${days == 1 ? 'último día' : '$days días'}', style: line),
       if (isPositiveAmount(review)) Text('Incluye ${formatCop(review)} por confirmar', style: line),
       if (g['reservado'] != null) ...[const SizedBox(height: 16), ReservedCard(amount: g['reservado'] as String)],
     ];

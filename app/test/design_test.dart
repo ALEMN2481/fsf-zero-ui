@@ -10,6 +10,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'home_test.dart' show backend, gps, now;
 
+import 'support.dart';
+
 /// Paso 12B (D14): pantallas nuevas del diseño, accesibilidad y textos honestos.
 
 Widget wrap(Widget child, {double scale = 1}) => MaterialApp(
@@ -36,7 +38,7 @@ Future<void> accessible(WidgetTester tester) async {
 void main() {
   group('tutorial «Primer vistazo»', () {
     testWidgets('se muestra con las cifras reales, sin Obligaciones, señala el Coach y se cierra', (tester) async {
-      phone(tester);
+      tall(tester);
       var done = 0;
       await tester.pumpWidget(
         wrap(
@@ -57,7 +59,9 @@ void main() {
       for (final banned in ['Obligaciones', 'obligaciones']) {
         expect(find.textContaining(banned), findsNothing, reason: banned);
       }
-      expect(find.textContaining('hablar con tu Coach'), findsOneWidget); // Paso 13
+      expect(find.textContaining('está tu Coach'), findsOneWidget); // en la cabecera (Paso 15B)
+      expect(find.textContaining('Con + agregas a mano un gasto en efectivo'), findsOneWidget);
+      expect(find.textContaining('Cada barra es lo que gastaste'), findsOneWidget);
       final scroll = find.descendant(of: find.byType(TutorialOverlay), matching: find.byType(Scrollable));
       await tester.scrollUntilVisible(find.text('Entendido'), 200, scrollable: scroll.first);
       await tester.tap(find.text('Entendido'));

@@ -96,8 +96,8 @@ class Harness {
   Future<void> restoreSession() => auth.setInitialSession(jsonEncode(sessionJson()));
 }
 
-/// La pantalla principal está a la vista (su menú «Más opciones»).
-final homeShown = find.byTooltip('Más opciones');
+/// La pantalla principal está a la vista (su menú «Ajustes»).
+final homeShown = find.byTooltip('Ajustes');
 
 /// El formulario es más alto que la superficie de test: se desplaza hasta el botón antes de tocarlo.
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
@@ -251,7 +251,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(await h.storage.read(key: supabasePersistSessionKey), isNotNull);
 
-    await tester.tap(find.byTooltip('Más opciones'));
+    await tester.tap(find.byTooltip('Ajustes'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();

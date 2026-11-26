@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart' show Size;
+import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -21,4 +23,12 @@ class FakeBackend {
   int count(String route) => sent.where((r) => '${r.method} ${r.url.path}' == route).length;
   Map<String, dynamic> body(String route) =>
       jsonDecode(sent.lastWhere((r) => '${r.method} ${r.url.path}' == route).body) as Map<String, dynamic>;
+}
+
+/// Un teléfono alto (393×1745 lógicos): la principal entera a la vista, con el gráfico de la
+/// semana (Paso 15B) los movimientos ya no caben en los 800×600 por defecto.
+void tall(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1080, 4800);
+  tester.view.devicePixelRatio = 2.75;
+  addTearDown(tester.view.reset);
 }

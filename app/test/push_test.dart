@@ -217,7 +217,7 @@ void main() {
     final b = pushBackend(), push = FakePush();
     var out = 0;
     await pumpHome(tester, b, push, onSignOut: () => out++);
-    await tester.tap(find.byTooltip('Más opciones'));
+    await tester.tap(find.byTooltip('Ajustes'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
@@ -275,7 +275,7 @@ void main() {
       final b = pushBackend();
       b.routes['POST /gmail/disconnect'] = (_) => {'revocada': false};
       await pumpHome(tester, b, FakePush());
-      await tester.tap(find.byTooltip('Más opciones'));
+      await tester.tap(find.byTooltip('Ajustes'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Fuentes de datos'));
       await tester.pumpAndSettle();

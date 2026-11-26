@@ -8,6 +8,7 @@ import 'package:fsf_app/home_screen.dart';
 import 'package:fsf_app/money.dart' show nbsp;
 import 'package:fsf_app/movements.dart';
 import 'package:fsf_app/pockets_screen.dart';
+import 'package:fsf_app/week_bars.dart';
 import 'package:http/http.dart' as http;
 
 import 'support.dart';
@@ -33,6 +34,13 @@ Map<String, dynamic> gps({
   'disponible_semana': '1313330.00',
   'en_revision': revision,
   'reservado': '350000.00',
+  // Paso 15B: lo gastado cada día de lunes 23 a domingo 29 (hoy es el miércoles 25).
+  'semana_dias': [
+    {'fecha': '2026-11-23', 'gastado': '32000.00'},
+    {'fecha': '2026-11-24', 'gastado': '10000.00'},
+    {'fecha': '2026-11-25', 'gastado': '23500.00'},
+    for (final d in ['26', '27', '28', '29']) {'fecha': '2026-11-$d', 'gastado': '0.00'},
+  ],
 };
 
 final movements = [
@@ -123,20 +131,25 @@ Finder textContaining(String s) => find.byWidgetPredicate((w) => w is Text && pl
 
 void main() {
   testWidgets('1 · una cifra grande en el centro y pocas líneas debajo', (tester) async {
+    tall(tester);
     final b = backend();
     await tester.pumpWidget(app(b));
     await tester.pumpAndSettle();
     expect(find.text('HOY PUEDES GASTAR'), findsOneWidget);
     expect(plain(tester.widget<Text>(find.byKey(const Key('disponible_hoy'))).data!), '\$ 246.666');
-    expect(textContaining('Esta semana \$ 1.313.330'), findsOneWidget);
-    expect(textContaining('Libre este mes \$ 1.580.000 · 6 días'), findsOneWidget);
+    expect(textContaining('Te quedan esta semana \$ 1.313.330'), findsOneWidget);
+    expect(textContaining('Te quedan este mes \$ 1.580.000 · 6 días'), findsOneWidget);
     expect(textContaining('Incluye \$ 10.000 por confirmar'), findsOneWidget);
     expect(find.byKey(const Key('gps')), findsNothing); // sin exceso no hay aviso GPS
     expect(find.text(pendingLabel), findsOneWidget);
     expect(textContaining('efectivo, ya contado en el retiro'), findsOneWidget);
     expect(textContaining('-\$ 23.500'), findsOneWidget);
-    expect(find.text('hoy 07:45'), findsOneWidget); // hora de Colombia
-    expect(find.text('ayer 18:10'), findsOneWidget);
+    // Agrupados por día (Paso 15B), en hora de Colombia; dentro del grupo, solo la hora.
+    expect(find.text('Hoy'), findsOneWidget);
+    expect(find.text('Ayer'), findsOneWidget);
+    expect(find.text('Lunes 23'), findsOneWidget);
+    expect(find.text('07:45'), findsOneWidget);
+    expect(find.text('18:10'), findsOneWidget);
     expect(textContaining('Reservado'), findsOneWidget);
     expect(plain(tester.widget<Text>(find.byKey(const Key('reservado'))).data!), '\$ 350.000');
     expect(b.sent.every((r) => r.headers['Authorization'] == 'Bearer jwt-usuario'), isTrue);
@@ -211,6 +224,7 @@ void main() {
   });
 
   testWidgets('4 · estado vacío con el texto del documento y acceso al correo', (tester) async {
+    tall(tester);
     final opened = <Uri>[];
     final b = backend(list: [], gmail: 'none');
     await tester.pumpWidget(app(b, opened: opened));
@@ -223,6 +237,7 @@ void main() {
   });
 
   testWidgets('4b · con Gmail conectado el estado vacío no ofrece conectar', (tester) async {
+    tall(tester);
     await tester.pumpWidget(app(backend(list: [])));
     await tester.pumpAndSettle();
     expect(find.text(emptyText), findsOneWidget);
@@ -230,6 +245,7 @@ void main() {
   });
 
   testWidgets('5 · por confirmar: categoría con un toque, confirmar y descartar', (tester) async {
+    tall(tester);
     final b = backend();
     await tester.pumpWidget(app(b));
     await tester.pumpAndSettle();
@@ -255,6 +271,7 @@ void main() {
   });
 
   testWidgets('5b · un movimiento confirmado solo deja cambiar la categoría', (tester) async {
+    tall(tester);
     await tester.pumpWidget(app(backend()));
     await tester.pumpAndSettle();
     await tester.tap(find.text('PANADERIA EJEMPLO'));
@@ -362,15 +379,18 @@ void main() {
   });
 
   group('Zero-UI y accesibilidad (RQN 05)', () {
-    testWidgets('sin tablas ni gráficos', (tester) async {
+    testWidgets('sin tablas; el único gráfico es el de la semana (D13)', (tester) async {
       await tester.pumpWidget(app(backend()));
       await tester.pumpAndSettle();
       expect(find.byType(Table), findsNothing);
       expect(find.byType(DataTable), findsNothing);
+      expect(find.byType(WeekBars), findsOneWidget);
+      // Ningún otro dibujo: ni CustomPaint fuera de los del propio framework ni widgets «Chart».
       expect(
         find.byType(CustomPaint).evaluate().where((e) => e.widget.runtimeType.toString().contains('Chart')),
         isEmpty,
       );
+      expect(find.descendant(of: find.byType(WeekBars), matching: find.byType(CustomPaint)), findsNothing);
       final pubspec = File('pubspec.yaml').readAsStringSync();
       for (final chart in ['fl_chart', 'charts_flutter', 'syncfusion_flutter_charts', 'graphic']) {
         expect(pubspec.contains(chart), isFalse, reason: chart);
@@ -420,6 +440,7 @@ void main() {
   });
 
   testWidgets('5c · en un ingreso sí se ofrece «Ingresos»', (tester) async {
+    tall(tester);
     final income = {
       ...movements.first,
       'id': 't9',
