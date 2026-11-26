@@ -244,19 +244,23 @@ def test_llm_down_keeps_pending_for_a_later_retry(env, monkeypatch):
     assert by_merchant(user_id)["TIENDA DE BARRIO EJEMPLO"] == ("Otros", "pendiente")
 
 
-def test_backfill_categorizes_old_movements(env, monkeypatch):
+def test_backfill_categorizes_old_movements_only_of_the_given_users(
+    env, users, monkeypatch
+):
     user_id, _ = env
+    other = users["b"]["id"]
     now = datetime.now(UTC).isoformat()
-    for merchant, direction in [
-        ("FARMACIA FICTICIA", "expense"),
-        ("ZAPATERIA INVENTADA", "expense"),
-        (None, "income"),
+    for owner, merchant, direction in [
+        (user_id, "FARMACIA FICTICIA", "expense"),
+        (user_id, "ZAPATERIA INVENTADA", "expense"),
+        (user_id, None, "income"),
+        (other, "FARMACIA FICTICIA", "expense"),  # de otro usuario: no se toca
     ]:
         svc(
             "POST",
             "transactions",
             json={
-                "user_id": user_id,
+                "user_id": owner,
                 "direction": direction,
                 "amount": "1000.00",
                 "merchant": merchant,
@@ -265,16 +269,30 @@ def test_backfill_categorizes_old_movements(env, monkeypatch):
             },
         )
     fake_llm(monkeypatch, "Otros")
-    counts = categorize.backfill()
-    assert counts["por_llm"] >= 1
+    counts = categorize.backfill([user_id])
+    assert counts == {"regla": 1, "pendiente": 1, "direccion": 1, "por_llm": 1}
     m = by_merchant(user_id)
     assert m["FARMACIA FICTICIA"] == ("Salud", "regla")
     assert m["ZAPATERIA INVENTADA"] == ("Otros", "otros")
     assert m[None] == ("Ingresos", "direccion")
     assert (
-        svc("GET", "transactions", params={"category_id": "is.null", "select": "id"})
+        svc(
+            "GET",
+            "transactions",
+            params={
+                "user_id": f"eq.{user_id}",
+                "category_id": "is.null",
+                "select": "id",
+            },
+        )
         == []
     )
+    untouched = svc(
+        "GET",
+        "transactions",
+        params={"user_id": f"eq.{other}", "select": "category_id"},
+    )
+    assert untouched == [{"category_id": None}]
 
 
 @pytest.mark.parametrize("corrected", [False, True])

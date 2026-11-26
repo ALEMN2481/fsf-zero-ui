@@ -201,19 +201,23 @@ def schedule(user_id: str) -> None:
         threading.Thread(target=_run_quietly, args=(user_id, True), daemon=True).start()
 
 
-def backfill() -> dict[str, int]:
+def backfill(user_ids: list[str] | None = None) -> dict[str, int]:
     """Categoriza los movimientos sin categoría y pasa por el LLM todos los 'pendiente'.
+
+    [user_ids]: solo esos usuarios (los tests no tocan datos ajenos); sin él, todos.
 
     Los movimientos de antes del Paso 10 no guardan su plantilla: una devolución antigua no se
     distingue de otro ingreso y queda en Ingresos (el usuario puede corregirla).
     """
     counts: dict[str, int] = {}
+    scope = {"user_id": f"in.({','.join(user_ids)})"} if user_ids is not None else {}
     while rows := _get(
         "transactions",
         {
             "category_id": "is.null",
             "select": "id,user_id,merchant,direction",
             "limit": 500,
+            **scope,
         },
     ):
         for row in rows:
@@ -229,7 +233,8 @@ def backfill() -> dict[str, int]:
     users = {
         r["user_id"]
         for r in _get(
-            "transactions", {"category_source": "eq.pendiente", "select": "user_id"}
+            "transactions",
+            {"category_source": "eq.pendiente", "select": "user_id", **scope},
         )
     }
     counts["por_llm"] = sum(run_pending(u) for u in sorted(users))
