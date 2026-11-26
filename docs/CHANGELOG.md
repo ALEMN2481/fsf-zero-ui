@@ -24,7 +24,8 @@
   - Emulador con FCM real: aviso de gasto = `disponible_hoy` de `/gps`; versión pública en la pantalla de bloqueo con «ocultar contenido sensible»; toque → hoja del movimiento o Fuentes de Datos; pregunta de categoría → hoja «Categorizar gasto» (`docs/capturas/paso14_emulador_*.png`).
   - Prueba real (3 facturas por Gmail → Pub/Sub → túnel → backend → FCM, `docs/mediciones/paso14_prueba_real.txt`): backend → FCM 0,5 s en caliente; FCM → teléfono 0,06–0,35 s; Gmail → backend 5,5–6,3 s (15,5 s el primero). Totales 16,8 s, 6,9 s y 196,9 s: el tercero por la conexión de FCM del emulador, que se muere sin tráfico (al reconectar llega).
 - Nube: `migration list --linked` → 9/9 tras el `db push --remote` del supervisor; **falta** `20261126000000_category_question.sql`.
-- Commits: af1ca5a, 716749a, 25256cd, c04b5bd, b687cb3, a9614ce, be4a281, ba45227, 34b6243, 88496f8, 9059f0e, b040f7a, 831e976.
+- Commits: af1ca5a, 716749a, 25256cd, c04b5bd, b687cb3, a9614ce, be4a281, ba45227, 34b6243, 88496f8, 9059f0e, b040f7a, 831e976, 0df7290, 7ef030b.
+- Cambio de D11: si el LLM responde «Otros», el movimiento queda con `category_source='otros'` (antes `llm`), igual que sin respuesta válida; se ajustaron las 2 pruebas del Paso 10 que fijaban lo anterior.
 - Pendientes/riesgos: RQN 04 medido en 20 pruebas y en un teléfono real (Paso 15); función SQL única del aviso según la medición en la nube (Paso 15); servidor en la misma región que Supabase (Paso 16); token clásico de FCM (obsoleto en firebase_messaging 17); `disconnect` no comprueba el código de respuesta de la revocación en Google; los tests de backfill de categorías recorren todos los usuarios de la base local; el LLM de categorías necesita Ollama en marcha (si no, no se pregunta hasta el siguiente correo); iOS sin probar.
 - Siguiente: Paso 15 — Seguridad y latencia.
 
