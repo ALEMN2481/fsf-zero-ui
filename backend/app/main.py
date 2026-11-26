@@ -352,7 +352,7 @@ def recent_movements(
 
 MOVEMENT_FIELDS = (
     "id,amount::text,direction,status,merchant,occurred_at,counts_in_budget,"
-    "to_last4,category_source,category_asked_at,category:categories(id,name)"
+    "to_last4,payment_method,category_source,category_asked_at,category:categories(id,name)"
 )
 
 
@@ -367,6 +367,9 @@ def _movement(r: dict, own: set[str]) -> dict:
         "categoria": (r["category"] or {}).get("name"),
         "categoria_id": (r["category"] or {}).get("id"),
         "tipo": engine_store.kind(r, own),
+        "medio": r.get(
+            "payment_method"
+        ),  # para titular un gasto sin comercio (Paso 15B)
         # Ni las reglas ni el LLM la supieron y se le preguntó: la app abre sola la hoja.
         "preguntar_categoria": bool(r.get("category_asked_at"))
         and r.get("category_source") == "otros",

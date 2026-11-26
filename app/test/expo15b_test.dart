@@ -65,6 +65,20 @@ void main() {
     });
   });
 
+  test('un gasto a mano sin comercio se titula «Gasto en efectivo»', () {
+    expect(title({'comercio': null, 'direccion': 'expense', 'medio': 'cash'}), 'Gasto en efectivo');
+    expect(title({'comercio': null, 'direccion': 'expense', 'medio': 'transfer'}), 'Transferencia');
+    expect(title({'comercio': null, 'direccion': 'income', 'medio': 'cash'}), 'Ingreso');
+  });
+
+  testWidgets('el lector de pantalla dice el paso sin el porcentaje de la barra', (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(wrap(ManualExpenseScreen(api: Api(backend().client, 't'))));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Paso 1 de 3'), findsOneWidget);
+    handle.dispose();
+  });
+
   group('movimientos por día', () {
     test('Hoy, Ayer, día de la semana y, si es de otro mes, el mes', () {
       expect(dayLabel('2026-11-25T12:45:00+00:00', now), 'Hoy');

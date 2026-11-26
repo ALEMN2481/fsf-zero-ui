@@ -95,6 +95,7 @@ def test_a_cash_expense_from_a_withdrawal_does_not_lower_the_budget(users):
     )
     assert r.status_code == 201, r.text
     moved = r.json()
+    assert moved["medio"] == "cash"
     assert (moved["monto"], moved["comercio"], moved["categoria"], moved["tipo"]) == (
         "12500.00",
         "Panaderia del barrio",

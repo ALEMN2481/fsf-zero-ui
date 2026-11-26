@@ -96,7 +96,7 @@ class _ManualExpenseScreenState extends State<ManualExpenseScreen> {
             children: [
               Semantics(
                 label: 'Paso ${_step + 1} de 3',
-                child: LinearProgressIndicator(value: (_step + 1) / 3),
+                child: ExcludeSemantics(child: LinearProgressIndicator(value: (_step + 1) / 3)),
               ),
               const SizedBox(height: 24),
               Text(_questions[_step], style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 26, height: 1.2)),

@@ -71,7 +71,12 @@ String? kindNote(Map<String, dynamic> m) => switch (m['tipo']) {
 };
 
 String title(Map<String, dynamic> m) =>
-    (m['comercio'] as String?) ?? (m['direccion'] == 'income' ? 'Ingreso' : 'Transferencia');
+    (m['comercio'] as String?) ??
+    switch ((m['direccion'], m['medio'])) {
+      ('income', _) => 'Ingreso',
+      (_, 'cash') => 'Gasto en efectivo', // agregado a mano sin comercio (Paso 15B)
+      _ => 'Transferencia',
+    };
 
 class MovementCard extends StatelessWidget {
   const MovementCard({super.key, required this.movement, required this.now, required this.onTap, this.grouped = false});
