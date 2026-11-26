@@ -65,10 +65,20 @@ RECONNECT_MESSAGE = {
 
 _token_lock = threading.Lock()
 _token: tuple[str, float] | None = None  # (access token, caduca en epoch)
+_project: str | None = None
 
 
 def enabled() -> bool:
-    return bool(settings.fcm_credentials_file and settings.fcm_project_id)
+    return bool(settings.fcm_credentials_file)
+
+
+def _project_id() -> str:
+    """El proyecto de FCM es el de la cuenta de servicio (campo project_id de su clave, D16)."""
+    global _project
+    if _project is None:
+        with open(settings.fcm_credentials_file, encoding="utf-8") as f:
+            _project = json.load(f)["project_id"]
+    return _project
 
 
 def _access_token() -> str:
@@ -107,7 +117,7 @@ def _access_token() -> str:
 
 def _post(token: str, data: dict[str, str]) -> httpx.Response:
     return httpx.post(
-        f"https://fcm.googleapis.com/v1/projects/{settings.fcm_project_id}/messages:send",
+        f"https://fcm.googleapis.com/v1/projects/{_project_id()}/messages:send",
         headers={"Authorization": f"Bearer {_access_token()}"},
         json={
             "message": {"token": token, "data": data, "android": {"priority": "high"}}
@@ -117,6 +127,16 @@ def _post(token: str, data: dict[str, str]) -> httpx.Response:
 
 
 Sender = Callable[[str, dict[str, str]], httpx.Response]
+
+
+def _unregistered(r: httpx.Response) -> bool:
+    """Token muerto solo si FCM lo dice en su error JSON. Un 404 en HTML (p. ej. un FCM_PROJECT_ID
+    mal puesto) no lo es: borrarlo dejaría al teléfono sin avisos."""
+    try:
+        details = r.json().get("error", {}).get("details", [])
+    except ValueError:
+        return False
+    return any(d.get("errorCode") == "UNREGISTERED" for d in details)
 
 
 def send(
@@ -163,7 +183,7 @@ def send(
             continue
         if r.status_code == 200:
             sent += 1
-        elif r.status_code == 404 or "UNREGISTERED" in r.text:
+        elif _unregistered(r):
             service_db.rest("DELETE", "device_tokens", params={"token": f"eq.{token}"})
             log.info("token borrado motivo=no_registrado user=%s", user_id)
         else:

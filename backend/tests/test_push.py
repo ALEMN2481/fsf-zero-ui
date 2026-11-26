@@ -65,20 +65,31 @@ def test_disabled_without_credentials():
 # ---------------------------------------------------------------- integración
 class FakeFcm:
     def __init__(self, status=200):
-        self.status, self.sent = status, []
+        self.status, self.sent, self.html = status, [], False
 
     def __call__(self, token, data):
         self.sent.append((token, data))
-        return httpx.Response(
-            self.status, text="" if self.status == 200 else "UNREGISTERED"
-        )
+        if self.status == 200:
+            return httpx.Response(200, json={"name": "projects/p/messages/1"})
+        if (
+            self.status == 404 and not self.html
+        ):  # así responde FCM HTTP v1 a un token muerto
+            return httpx.Response(
+                404,
+                json={
+                    "error": {
+                        "status": "NOT_FOUND",
+                        "details": [{"errorCode": "UNREGISTERED"}],
+                    }
+                },
+            )
+        return httpx.Response(self.status, text="<html>Not Found</html>")
 
 
 @pytest.fixture
 def fcm(monkeypatch):
     fake = FakeFcm()
     monkeypatch.setattr(settings, "fcm_credentials_file", "simulado.json")
-    monkeypatch.setattr(settings, "fcm_project_id", "proyecto-simulado")
     monkeypatch.setattr(push, "_post", fake)
     return fake
 
@@ -152,6 +163,20 @@ def test_dead_tokens_are_removed(env, users, fcm):
     tx(user_id, "10000")
     assert push.new_movements(user_id) == 0
     assert svc("GET", "device_tokens?token=eq.tok-viejo&select=token") == []
+
+
+@requires_local
+def test_an_html_404_does_not_delete_the_token(env, users, fcm):
+    # Un FCM_PROJECT_ID mal puesto da 404 en HTML: el token sigue siendo bueno.
+    user_id, _ = env
+    device("tok-bueno", users["a"])
+    fcm.status = 404
+    fcm.html = True
+    tx(user_id, "10000")
+    assert push.new_movements(user_id) == 0
+    assert svc("GET", "device_tokens?token=eq.tok-bueno&select=token") == [
+        {"token": "tok-bueno"}
+    ]
 
 
 @requires_local
