@@ -10,6 +10,24 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-26 · Paso 14 — Avisos push con FCM (D16)
+- RQ: RQF 02, RQF 03, RQN 04, RQN 01, RQN 05. Decisión D16 (con sus ajustes del 2026-11-26).
+- Cambios (db): `device_tokens` (solo escribe el backend, RLS de lectura), `transactions.notified_at` (un aviso por movimiento) y `transactions.category_asked_at` (una pregunta de categoría por gasto). pgTAP: 85.
+- Cambios (backend):
+  - `push.py`: FCM HTTP v1 con mensajes solo de datos; proyecto tomado del `project_id` de la clave; token OAuth en memoria; tokens muertos solo con `UNREGISTERED`.
+  - Avisos: gasto registrado (monto + «hoy puedes gastar» del motor, sin comercio), factura en efectivo («Ya estaba contada en tu retiro»), por confirmar y reconexión de Gmail (sin cifras), y «¿En qué categoría va este gasto?» cuando ni las reglas ni el LLM la saben.
+  - Latencia: cliente HTTP compartido, token de Gmail en memoria (401 → uno nuevo y un reintento), aviso antes de marcar el correo, lecturas en paralelo y una sola de `accounts` por correo. Ingesta local 7.114 ms → ~410 ms (`docs/mediciones/paso14_latencia_backend.txt`).
+  - Endpoints `GET /transactions/{id}`, `POST /devices`, `DELETE /devices`; movimientos con `preguntar_categoria`.
+- Cambios (app): servicio nativo `FsfMessagingService` (VISIBILITY_PRIVATE con versión pública, canales «Movimientos» y «Conexión con Gmail», enlaces `movimiento/<id>` y `fuentes`); permiso explicado una vez tras el tutorial; tarjeta «Avisos» en Fuentes de Datos con el botón para ocultar cifras en la pantalla de bloqueo; mensaje con la app abierta (negro, radio 16, «Ver») que abre la hoja; hoja «Categorizar gasto» que aparece sola; token renovado (sin 401 a la hora) y deep linking de Flutter desactivado.
+- Verificación:
+  - Backend: `pytest` → **452 passed** (con Supabase local); `ruff` limpio. pgTAP: `supabase test db` → **85 OK**. App: `flutter analyze` sin problemas; `flutter test` → **106 passed** (goldens 13 y 14 nuevos). CI y DB en verde.
+  - Emulador con FCM real: aviso de gasto = `disponible_hoy` de `/gps`; versión pública en la pantalla de bloqueo con «ocultar contenido sensible»; toque → hoja del movimiento o Fuentes de Datos; pregunta de categoría → hoja «Categorizar gasto» (`docs/capturas/paso14_emulador_*.png`).
+  - Prueba real (3 facturas por Gmail → Pub/Sub → túnel → backend → FCM, `docs/mediciones/paso14_prueba_real.txt`): backend → FCM 0,5 s en caliente; FCM → teléfono 0,06–0,35 s; Gmail → backend 5,5–6,3 s (15,5 s el primero). Totales 16,8 s, 6,9 s y 196,9 s: el tercero por la conexión de FCM del emulador, que se muere sin tráfico (al reconectar llega).
+- Nube: `migration list --linked` → 9/9 tras el `db push --remote` del supervisor; **falta** `20261126000000_category_question.sql`.
+- Commits: af1ca5a, 716749a, 25256cd, c04b5bd, b687cb3, a9614ce, be4a281, ba45227, 34b6243, 88496f8, 9059f0e, b040f7a, 831e976.
+- Pendientes/riesgos: RQN 04 medido en 20 pruebas y en un teléfono real (Paso 15); función SQL única del aviso según la medición en la nube (Paso 15); servidor en la misma región que Supabase (Paso 16); token clásico de FCM (obsoleto en firebase_messaging 17); `disconnect` no comprueba el código de respuesta de la revocación en Google; los tests de backfill de categorías recorren todos los usuarios de la base local; el LLM de categorías necesita Ollama en marcha (si no, no se pregunta hasta el siguiente correo); iOS sin probar.
+- Siguiente: Paso 15 — Seguridad y latencia.
+
 ## 2026-11-25 · Paso 13 (ajustes) — Medio de pago, crédito como consejo y qwen2.5:7b medido
 - RQ: RQF 04, RQN 03. Decisiones D10 y D15 actualizadas.
 - Nube: `migration list --linked` (solo lectura) tras el `db push --remote` del supervisor → **8/8 migraciones en local y en remoto**, incluida `20261125060000_coach.sql`.

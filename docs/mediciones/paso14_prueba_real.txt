@@ -1,0 +1,30 @@
+Paso 14 · Prueba real (RQN 04): correo en Gmail → aviso en el teléfono (2026-11-26)
+Montaje: Gmail del supervisor conectado a una cuenta local; Pub/Sub (gmail-fsf-push) → túnel de
+Cloudflare → backend local optimizado → Supabase local → FCM HTTP v1 → emulador Pixel 8 API 35.
+Correos: facturas DIAN simuladas (FE-PRUEBA-0003/0004/0005) enviadas desde otra cuenta de Gmail.
+Se enviaron 3 (0006 y 0007 no se usaron).
+
+Fuentes: T0 = internalDate de Gmail (llega con resolución de segundo); log del backend
+(«correo guardado», «aviso … enviados=1», «latencia gmail→guardado»); logcat del teléfono
+(«fsf.push latencia correo→aviso»). Reloj del emulador: −573 ms respecto al PC (corregido).
+El backend no registra la llegada del aviso de Pub/Sub: el tramo A incluye Gmail → Pub/Sub →
+túnel → backend y las llamadas a la API de Gmail (history + metadata + raw).
+
+correo   aviso            app        A: Gmail→backend   B: backend→FCM   C: FCM→teléfono   total
+0003     gasto (efectivo) abierta    15,5 s             0,89 s (frío*)   0,35 s            16,8 s
+0004     gasto (efectivo) abierta     6,3 s             0,54 s           0,06 s             6,9 s
+0005     por confirmar    2.º plano   5,5 s             0,51 s           190,9 s (**)     196,9 s
+* incluye pedir el token OAuth de FCM (una vez cada ~55 min).
+** FCM aceptó el envío a los 6,0 s, pero el emulador tenía muerta la conexión persistente con FCM
+   (mtalk.google.com:5228): Google Play services no recibió nada desde las 07:58. Al forzar la
+   reconexión (svc data disable/enable) llegaron de golpe el aviso real (196,9 s) y un reenvío de
+   diagnóstico (42 s). Se repitió a las 08:32 con la pregunta de categoría: mismo síntoma, misma
+   solución. Es del emulador (NAT de la red virtual), no del backend ni de FCM.
+
+Lectura:
+- Backend (tramo B): 0,5 s en caliente; objetivo de < 1,5 s cumplido.
+- Con la conexión de FCM viva, el teléfono recibe en 0,06–0,35 s (tramo C).
+- El tramo A domina: 5,5–6,3 s típico; 15,5 s en el primer correo (Gmail/Pub/Sub en frío).
+- RQN 04 (< 10 s): 1 de 3 en esta prueba (0004); 0003 por el tramo A en frío, 0005 por el
+  emulador. La medición válida (p95 en 20 pruebas, en un teléfono real) queda para el Paso 15.
+- A las 08:00:45 llegó un aviso con 1 mensaje que no se guardó (no era factura ni alerta).
