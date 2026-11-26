@@ -80,6 +80,7 @@ FakeBackend backend({Map<String, dynamic>? state, List<Map<String, dynamic>>? li
         {'id': 'c-ali', 'name': 'Alimentos', 'user_id': null},
         {'id': 'c-otr', 'name': 'Otros', 'user_id': null},
         {'id': 'c-tra', 'name': 'Transporte', 'user_id': null},
+        {'id': 'c-ing', 'name': 'Ingresos', 'user_id': null},
       ],
       'GET /budgets/suggestion': (_) => {
         'gasto_mes_anterior': '2850000.00',
@@ -259,6 +260,7 @@ void main() {
     await tester.tap(find.text('PANADERIA EJEMPLO'));
     await tester.pumpAndSettle();
     expect(find.byType(CategoryOption), findsNWidgets(3));
+    expect(find.widgetWithText(CategoryOption, 'Ingresos'), findsNothing); // un gasto no es un ingreso
     expect(find.text('Confirmar'), findsNothing);
     expect(find.text('No es un gasto mío'), findsNothing);
   });
@@ -415,5 +417,23 @@ void main() {
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       expect(find.byType(PocketCard), findsOneWidget);
     });
+  });
+
+  testWidgets('5c · en un ingreso sí se ofrece «Ingresos»', (tester) async {
+    final income = {
+      ...movements.first,
+      'id': 't9',
+      'direccion': 'income',
+      'tipo': 'ingreso',
+      'comercio': 'EMPRESA EMPLEADORA EJEMPLO SAS',
+      'categoria': 'Ingresos',
+      'categoria_id': 'c-ing',
+    };
+    await tester.pumpWidget(app(backend(list: [income])));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('EMPRESA EMPLEADORA EJEMPLO SAS'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(CategoryOption, 'Ingresos'), findsOneWidget);
+    expect(find.byType(CategoryOption), findsNWidgets(4));
   });
 }

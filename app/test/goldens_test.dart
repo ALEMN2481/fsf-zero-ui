@@ -99,13 +99,15 @@ Future<void> shootWidget(WidgetTester tester, Widget screen, {double scale = 1, 
     ),
   );
   // La barra del arranque es indefinida: nunca se asienta, se avanza un tiempo fijo.
+  // Las imágenes se decodifican fuera del reloj falso del test: se precargan de verdad.
+  await tester.runAsync(() async {
+    for (final asset in ['assets/images/logo.png', 'assets/images/google_g.png']) {
+      await precacheImage(AssetImage(asset), tester.element(find.byWidget(screen)));
+    }
+  });
   if (settle) {
     await tester.pumpAndSettle();
   } else {
-    // Las imágenes se decodifican fuera del reloj falso del test: se precargan de verdad.
-    await tester.runAsync(
-      () => precacheImage(const AssetImage('assets/images/logo.png'), tester.element(find.byWidget(screen))),
-    );
     await tester.pump(const Duration(milliseconds: 600));
   }
 }

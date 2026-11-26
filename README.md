@@ -39,3 +39,4 @@ la primera llamada con el modelo fuera de memoria tarda ~12–14 s.
 - Tipografías **Inter** (The Inter Project Authors) y **Unbounded** (The Unbounded Project Authors), con licencia SIL Open Font License 1.1: `app/assets/fonts/*/OFL.txt`.
 - Estilo visual adaptado de la plantilla «Invest App App design (Community)» de la Comunidad de Figma. *Licencia pendiente de revisar por el supervisor (ver ROADMAP); si exige atribución, se añadirá aquí.*
 - Logo: `docs/design/logo.png`.
+- Logo «G» de Google en «Continuar con Google»: recurso oficial de las normas de marca de *Sign in with Google* (tema «Neutral»), sin modificar (`app/assets/images/google_g.png`).

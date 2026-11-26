@@ -106,6 +106,9 @@ void main() {
         expect(find.textContaining(banned), findsNothing, reason: banned);
       }
       expect(find.textContaining('Tus datos viajan y se guardan cifrados'), findsOneWidget);
+      // El backend mira remitente y asunto de todos para filtrar: no se dice «solo leemos».
+      expect(find.textContaining('Solo guardamos los correos de tu banco'), findsOneWidget);
+      expect(find.textContaining('Solo leemos'), findsNothing);
     });
 
     testWidgets('conectado no muestra botón; caído pide reconectar', (tester) async {
@@ -138,6 +141,17 @@ void main() {
     await tester.pumpWidget(wrap(AuthScreen(auth: auth), scale: 2));
     await tester.pumpAndSettle();
     expect(find.byType(AppLogo), findsOneWidget);
+    // «Continuar con Google» lleva la «G» oficial (normas de marca de Google).
+    final google = find.widgetWithText(OutlinedButton, 'Continuar con Google');
+    expect(
+      find.descendant(
+        of: google,
+        matching: find.byWidgetPredicate(
+          (w) => w is Image && (w.image as AssetImage).assetName == 'assets/images/google_g.png',
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(find.byType(TextFormField).evaluate().length, lessThanOrEqualTo(3));
     for (final banned in ['Apple', 'FaceID', 'Términos']) {
       expect(find.textContaining(banned), findsNothing, reason: banned);

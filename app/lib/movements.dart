@@ -186,7 +186,8 @@ class _MovementSheetState extends State<MovementSheet> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  for (final c in _categories)
+                  // «Ingresos» solo se ofrece en los ingresos, nunca en un gasto.
+                  for (final c in _categories.where((c) => income || c['name'] != 'Ingresos'))
                     SizedBox(
                       width: (box.maxWidth - 12) / 2, // dos por fila
                       child: CategoryOption(

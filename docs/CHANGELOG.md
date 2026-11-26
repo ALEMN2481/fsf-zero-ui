@@ -10,6 +10,12 @@
 - Siguiente: Paso NN+1
 -->
 
+## 2026-11-25 · Paso 12B (correcciones) — Ingresos en la hoja, logo de Google y textos
+- RQ: RQF 04, RQF 01, RQN 05.
+- Cambios (app): la hoja de un gasto ya no ofrece «Ingresos» (solo en los ingresos); «Continuar con Google» lleva la «G» oficial de las normas de marca de Google (tema «Neutral»: fondo `#F2F2F2`, texto `#1F1F1F` en Roboto Medium; recurso sin modificar en 1x–4x); Fuentes de Datos dice «Solo guardamos los correos de tu banco y de facturación electrónica…» (el backend mira remitente y asunto de todos para filtrar). README: crédito del logo de Google.
+- Verificación: `flutter test --exclude-tags golden` → `66 passed` (5b: sin «Ingresos» en un gasto; 5c nuevo: con «Ingresos» en un ingreso; acceso con la «G»; texto de Fuentes de Datos). Mutación verificada: sin el filtro, 5b falla. Golden regenerados (`5_movimiento_por_confirmar`, `8_acceso`, `10_fuentes_de_datos`; las imágenes se precargan en todas las capturas). Emulador API 35: Fuentes de Datos tiene la flecha de volver y vuelve a la principal (`docs/capturas/paso12b_emulador_fuentes_de_datos.png`).
+- Siguiente: plan del Paso 13 (Coach).
+
 ## 2026-11-25 · Paso 12B — Ajuste visual (diseño de Figma) y retoque del Paso 7
 - RQ: RQF 04, RQF 01, RQN 05, RQN 02, RQN 03. Decisión **D14** (`CONTEXT.md`).
 - Nube: `migration list --linked` (solo lectura) → **7/7 migraciones en local y en remoto**; se quitó el pendiente del ROADMAP.

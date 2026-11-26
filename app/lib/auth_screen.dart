@@ -150,7 +150,18 @@ class _AuthScreenState extends State<AuthScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                OutlinedButton(onPressed: _busy ? null : _google, child: const Text('Continuar con Google')),
+                // Normas de marca de Google (tema «Neutral»): «G» oficial sin modificar, fondo #F2F2F2,
+                // texto #1F1F1F en Roboto Medium.
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _google,
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF2F2F2),
+                    foregroundColor: const Color(0xFF1F1F1F),
+                    textStyle: const TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w500, fontSize: 15),
+                  ),
+                  icon: Image.asset('assets/images/google_g.png', width: 40, height: 40, excludeFromSemantics: true),
+                  label: const Text('Continuar con Google'),
+                ),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(16),

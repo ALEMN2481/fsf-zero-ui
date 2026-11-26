@@ -78,7 +78,7 @@ class _DataSourcesScreenState extends State<DataSourcesScreen> with WidgetsBindi
           const Icon(Icons.lock_outline, color: Fsf.textoSecundario),
           const SizedBox(height: 8),
           const Text(
-            'Tus datos viajan y se guardan cifrados. Solo leemos los correos de tu banco y de '
+            'Tus datos viajan y se guardan cifrados. Solo guardamos los correos de tu banco y de '
             'facturación electrónica, y puedes desconectar Gmail cuando quieras.',
             textAlign: TextAlign.center,
             style: Fsf.ayuda,

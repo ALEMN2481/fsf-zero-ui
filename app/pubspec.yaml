@@ -37,6 +37,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/images/google_g.png # logo «G» oficial de Google (normas de marca, sin modificar)
   # Empaquetadas en la app (licencia SIL OFL 1.1, ver OFL.txt en cada carpeta): no se descargan.
   fonts:
     - family: Inter
