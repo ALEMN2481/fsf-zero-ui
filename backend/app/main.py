@@ -151,16 +151,65 @@ def set_category(tx_id: UUID, body: CategoryChange, user: User) -> dict:
         raise HTTPException(422, "Categoría no disponible")
     change = {"category_id": str(body.category_id), "category_source": "usuario"}
     _rest(user, f"transactions?id=eq.{tx_id}", "PATCH", change)
-    key = categorize.merchant_key(tx[0]["merchant"] or "")
+    _learn_rule(user, tx[0]["merchant"], change["category_id"])
+    return {"id": str(tx_id), **change}
+
+
+def _learn_rule(user: CurrentUser, merchant: str | None, category_id: str) -> None:
+    """Regla comercio → categoría para los siguientes movimientos (Paso 10)."""
+    key = categorize.merchant_key(merchant or "")
     if key:
         _rest(
             user,
             "category_rules?on_conflict=user_id,merchant_key",
             "POST",
-            {"merchant_key": key, "category_id": change["category_id"]},
+            {"merchant_key": key, "category_id": category_id},
             prefer="resolution=merge-duplicates",
         )
-    return {"id": str(tx_id), **change}
+
+
+class ManualExpenseIn(BaseModel):
+    monto: Annotated[Decimal, Field(gt=0, max_digits=14, decimal_places=2)]
+    category_id: UUID
+    comercio: Annotated[str | None, Field(max_length=60)] = None
+    fuera_de_retiro: bool = False
+
+
+@app.post("/transactions", status_code=201)
+def add_manual_expense(body: ManualExpenseIn, user: User) -> dict:
+    """Gasto en efectivo agregado a mano (Paso 15B). Sin «No salió de un retiro» no cuenta en el
+    presupuesto: ese efectivo ya se contó con el retiro (D12). Con el JWT del usuario (RLS); no
+    avisa por push (lo hizo el propio usuario) y aprende la regla del comercio."""
+    category = _rest(user, f"categories?id=eq.{body.category_id}&select=name")
+    if not category or category[0]["name"] == gps.INCOME:
+        raise HTTPException(422, "Categoría no disponible")
+    merchant = " ".join((body.comercio or "").split()) or None
+    now = datetime.now(UTC).isoformat()
+    created = _rest(
+        user,
+        f"transactions?select={MOVEMENT_FIELDS}",
+        "POST",
+        {
+            "user_id": user.id,
+            "direction": "expense",
+            "amount": str(body.monto),
+            "merchant": merchant,
+            "occurred_at": now,
+            "payment_method": "cash",
+            "source": "manual",
+            "status": "confirmed",
+            "counts_in_budget": body.fuera_de_retiro,
+            "category_id": str(body.category_id),
+            "category_source": "usuario",
+            "notified_at": now,
+        },
+        prefer="return=representation",
+    )
+    if not created:
+        raise HTTPException(502, "Error guardando el gasto")
+    _learn_rule(user, merchant, str(body.category_id))
+    rest = lambda path: _rest(user, path)
+    return _movement(created[0], engine_store.own_accounts(rest))
 
 
 # ---------------------------------------------------------------- motor GPS (Paso 11, D12)
@@ -195,9 +244,23 @@ def gps_state(user: User) -> dict:
     `reservado`: lo apartado en todos los bolsillos (no solo en el periodo), para la tarjeta
     «Reservado» de la principal (D14).
     """
-    state = _summary(user)
+    rest = lambda path: _rest(user, path)
+    today = _today()
+    budget, movements, pocket_moves = engine_store.load(rest, today)
+    state = gps.summary(budget, today, movements, pocket_moves)
     if state["estado"] == "ok":
         state["reservado"] = sum(_pocket_balances(user).values(), gps.ZERO)
+        # Gráfico de la semana (Paso 15B): si la semana empezó antes del periodo, se lee aparte.
+        monday = today - timedelta(days=today.weekday())
+        week = (
+            movements
+            if budget.start <= monday
+            else engine_store.movements(rest, monday, today)
+        )
+        state["semana_dias"] = [
+            {"fecha": day, "gastado": spent}
+            for day, spent in gps.week_by_day(week, today)
+        ]
     return _jsonable(state)
 
 

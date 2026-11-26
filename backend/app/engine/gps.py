@@ -208,6 +208,18 @@ def by_method(movements: list[Movement]) -> dict[str, Decimal]:
     return dict(totals)
 
 
+def week_by_day(movements: list[Movement], today: date) -> list[tuple[date, Decimal]]:
+    """Lo gastado cada día de lunes a domingo de la semana de [today] (gráfico de la principal,
+    Paso 15B): lo que cuenta en el presupuesto, neto de devoluciones y nunca negativo. Los días que
+    aún no llegan quedan en 0."""
+    monday = today - timedelta(days=today.weekday())
+    totals = {monday + timedelta(days=i): ZERO for i in range(7)}
+    for m in movements:
+        if m.day in totals and m.kind in (SPENDING, REFUND):
+            totals[m.day] += m.amount if m.kind == SPENDING else -m.amount
+    return [(day, max(total, ZERO).quantize(CENT)) for day, total in totals.items()]
+
+
 def week_by_category(movements: list[Movement], today: date) -> dict[str, Decimal]:
     """Gasto neto por categoría de lunes a hoy (como en Gasto), solo las categorías con gasto > 0."""
     monday = today - timedelta(days=today.weekday())
