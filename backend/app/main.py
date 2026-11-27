@@ -119,6 +119,16 @@ def me(user: User) -> dict:
     rows = _rest(user, "profiles?select=id,display_name,created_at")
     if not rows:
         raise HTTPException(404, "Perfil no encontrado")
+    # Al entrar con Google, el nombre de la cuenta queda en el perfil si aún no tiene uno: la
+    # cabecera lo muestra en lugar del correo (Paso 15B). Solo si está vacío: no pisa uno puesto.
+    if not (rows[0]["display_name"] or "").strip() and user.name:
+        _rest(
+            user,
+            f"profiles?id=eq.{user.id}&display_name=is.null",
+            "PATCH",
+            {"display_name": user.name},
+        )
+        rows[0]["display_name"] = user.name
     # Estado de Gmail: null (sin conectar), 'active' o 'needs_reconnect' (el aviso al usuario es del Paso 14).
     conn = _rest(user, "gmail_connections?select=status")
     return {**rows[0], "gmail_status": conn[0]["status"] if conn else None}

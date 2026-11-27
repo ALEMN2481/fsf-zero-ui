@@ -402,8 +402,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          // Abajo, espacio para que el botón del Coach no tape el último movimiento.
-          padding: const EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, 96),
+          // Abajo, espacio para que el botón «+» (60 + márgenes) no tape el último movimiento,
+          // más el borde del sistema (barra de gestos), que el botón también deja libre.
+          padding: EdgeInsets.fromLTRB(Fsf.margen, 0, Fsf.margen, 112 + MediaQuery.paddingOf(context).bottom),
           children: _body(context),
         ),
       ),

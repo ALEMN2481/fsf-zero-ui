@@ -75,3 +75,8 @@ def test_seed_is_repeatable_and_keeps_gmail_and_device(users, monkeypatch):
         {"id": other[0]["id"]}
     ]  # otra cuenta, intacta
     assert first[0] is not None and first[1] == "2000000.00"
+    # --nombre: la cabecera muestra el nombre y no el correo.
+    expo_seed.seed(a["id"], today, name="  Sofía   Expo ")
+    assert svc("GET", f"profiles?id=eq.{a['id']}&select=display_name") == [
+        {"display_name": "Sofía Expo"}
+    ]

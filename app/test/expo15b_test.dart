@@ -5,6 +5,7 @@ import 'package:fsf_app/home_screen.dart';
 import 'package:fsf_app/manual_expense.dart';
 import 'package:fsf_app/money.dart' show nbsp;
 import 'package:fsf_app/movements.dart';
+import 'package:fsf_app/theme.dart';
 import 'package:fsf_app/week_bars.dart';
 
 import 'design_test.dart' show accessible, phone, wrap;
@@ -188,6 +189,10 @@ void main() {
       await tester.pump();
       await next(tester);
       expect(find.text('¿Dónde fue?'), findsOneWidget);
+      // «Sí» viene marcado: ya se contó en el retiro.
+      expect(find.text(fromAtmQuestion), findsOneWidget);
+      expect(tester.widget<CategoryOption>(find.widgetWithText(CategoryOption, fromAtmYes)).selected, isTrue);
+      expect(find.text(countedInWithdrawal), findsOneWidget);
       await tester.enterText(find.byKey(const Key('comercio')), 'PANADERIA DEL BARRIO');
       await tester.tap(find.text('Guardar gasto'));
       await tester.pumpAndSettle();
@@ -200,7 +205,7 @@ void main() {
       expect(results, [savedFromWithdrawal]);
     });
 
-    testWidgets('con «No salió de un retiro» cuenta en el presupuesto; el comercio es opcional', (tester) async {
+    testWidgets('«No, me lo dieron» cuenta en el presupuesto; el comercio es opcional', (tester) async {
       final (b, results) = await open(tester);
       await tester.enterText(find.byKey(const Key('monto')), '1000000000000'); // 13 dígitos: no entra
       await tester.pump();
@@ -211,8 +216,9 @@ void main() {
       await tester.tap(find.text('Otros'));
       await tester.pump();
       await next(tester);
-      await tester.tap(find.text('No salió de un retiro'));
+      await tester.tap(find.text(fromAtmNo));
       await tester.pump();
+      expect(find.text(countedToday), findsOneWidget);
       await tester.tap(find.text('Guardar gasto'));
       await tester.pumpAndSettle();
       expect(b.body('POST /transactions'), {
@@ -256,6 +262,41 @@ void main() {
       await tester.pumpAndSettle();
       await accessible(tester);
     });
+  });
+
+  testWidgets('al final de la lista, el botón «+» no tapa el último movimiento', (tester) async {
+    phone(tester);
+    final b = backend();
+    // Con la barra de gestos (24 lógicos abajo), como en el emulador.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: fsfTheme(),
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(393, 851),
+            padding: EdgeInsets.only(bottom: 24),
+            viewPadding: EdgeInsets.only(bottom: 24),
+          ),
+          child: HomeScreen(
+            client: b.client,
+            token: 't',
+            onSignOut: () {},
+            links: const Stream.empty(),
+            now: () => now,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Hasta el final: la lista es perezosa y su largo crece a medida que construye.
+    final list = tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+    for (var i = 0; i < 5; i++) {
+      list.jumpTo(list.maxScrollExtent);
+      await tester.pumpAndSettle();
+    }
+    final last = tester.getRect(find.byType(MovementCard).last);
+    final fab = tester.getRect(find.byType(FloatingActionButton));
+    expect(last.bottom, lessThanOrEqualTo(fab.top - 8)); // con un respiro, no solo sin tocarse
   });
 
   testWidgets('la principal con cabecera, gráfico y grupos al 200 % cumple las guías', (tester) async {

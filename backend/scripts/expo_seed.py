@@ -1,7 +1,7 @@
 """Datos de la expo (D17, Paso 15): regenera siempre los mismos datos de ejemplo en UNA cuenta del
 Supabase LOCAL.
 
-    cd backend && .venv/Scripts/python.exe -m scripts.expo_seed --email <correo de la cuenta>
+    cd backend && .venv/Scripts/python.exe -m scripts.expo_seed --email <correo> [--nombre "<nombre>"]
 
 Borra los datos de esa cuenta (movimientos, correos guardados, presupuestos, bolsillos, reglas
 aprendidas, cuentas y conversación del Coach) y deja el mismo presupuesto, los mismos bolsillos y
@@ -52,8 +52,18 @@ def _rest(method: str, table: str, **kw) -> list:
     return service_db.rest(method, table, prefer="return=representation", **kw).json()
 
 
-def seed(user_id: str, today: date) -> dict[str, int]:
-    """Deja la cuenta con los datos de la expo. Devuelve cuántas filas creó de cada tipo."""
+def seed(user_id: str, today: date, name: str | None = None) -> dict[str, int]:
+    """Deja la cuenta con los datos de la expo. Devuelve cuántas filas creó de cada tipo.
+
+    [name]: el nombre que muestra la cabecera (así en la expo no se ve el correo).
+    """
+    if name:
+        service_db.rest(
+            "PATCH",
+            "profiles",
+            params={"id": f"eq.{user_id}"},
+            json={"display_name": " ".join(name.split())[:80]},
+        )
     for table in OWNED:
         service_db.rest("DELETE", table, params={"user_id": f"eq.{user_id}"})
     first, last = month_bounds(today)
@@ -67,11 +77,11 @@ def seed(user_id: str, today: date) -> dict[str, int]:
             "amount": BUDGET,
         },
     )
-    for name, target, saved in POCKETS:
+    for pocket_name, target, saved in POCKETS:
         [pocket] = _rest(
             "POST",
             "pockets",
-            json={"user_id": user_id, "name": name, "target_amount": target},
+            json={"user_id": user_id, "name": pocket_name, "target_amount": target},
         )
         _rest(
             "POST",
@@ -134,9 +144,14 @@ def _user_id(email: str) -> str:
 def main(argv: list[str]) -> None:
     if urlparse(settings.supabase_url).hostname not in ("127.0.0.1", "localhost"):
         sys.exit("Solo contra el Supabase local (D17)")
-    if len(argv) != 2 or argv[0] != "--email":
-        sys.exit("Uso: python -m scripts.expo_seed --email <correo de la cuenta>")
-    counts = seed(_user_id(argv[1]), datetime.now(COLOMBIA).date())
+    args = dict(zip(argv[::2], argv[1::2], strict=False))
+    if "--email" not in args or set(args) - {"--email", "--nombre"} or len(argv) % 2:
+        sys.exit(
+            'Uso: python -m scripts.expo_seed --email <correo> [--nombre "<nombre>"]'
+        )
+    counts = seed(
+        _user_id(args["--email"]), datetime.now(COLOMBIA).date(), args.get("--nombre")
+    )
     print("datos de la expo listos:", counts)
 
 

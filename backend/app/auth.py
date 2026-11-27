@@ -25,6 +25,8 @@ _last_kid_refetch = float("-inf")
 class CurrentUser:
     id: str
     token: str  # se reenvía a Supabase para que aplique RLS (D4)
+    # Nombre de la cuenta (Google: full_name o name en user_metadata), del JWT ya verificado.
+    name: str | None = None
 
 
 def _fetch_jwks() -> jwt.PyJWKSet:
@@ -78,7 +80,18 @@ def current_user(
         )
     except (jwt.PyJWTError, KeyError) as e:
         raise HTTPException(401, "Token inválido") from e
-    return CurrentUser(id=claims["sub"], token=token)
+    return CurrentUser(id=claims["sub"], token=token, name=_name(claims))
+
+
+def _name(claims: dict) -> str | None:
+    meta = claims.get("user_metadata")
+    if not isinstance(meta, dict):
+        return None
+    for key in ("full_name", "name"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())[:80]
+    return None
 
 
 User = Annotated[CurrentUser, Depends(current_user)]

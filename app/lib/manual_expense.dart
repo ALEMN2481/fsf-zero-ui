@@ -8,11 +8,15 @@ import 'theme.dart';
 
 const savedCounted = 'Gasto agregado';
 const savedFromWithdrawal = 'Gasto agregado · Ya estaba contado en tu retiro';
+const fromAtmQuestion = '¿Sacaste ese efectivo de un cajero?';
+const fromAtmYes = 'Sí', fromAtmNo = 'No, me lo dieron';
+const countedInWithdrawal = 'Ya lo contamos en tu retiro.';
+const countedToday = 'Lo descontamos de lo que puedes gastar hoy.';
 const maxAmountDigits = 12; // como el tope del backend (numeric(14, 2))
 
 /// Agregar un gasto a mano (Paso 15B), una pregunta por pantalla: monto → categoría → comercio.
 /// Siempre en efectivo: no descuenta del presupuesto (ya se contó en el retiro, D12) salvo que el
-/// usuario marque «No salió de un retiro». Devuelve el mensaje para mostrar al guardar.
+/// usuario diga que no lo sacó de un cajero. Devuelve el mensaje para mostrar al guardar.
 class ManualExpenseScreen extends StatefulWidget {
   const ManualExpenseScreen({super.key, required this.api});
 
@@ -164,18 +168,29 @@ class _ManualExpenseScreenState extends State<ManualExpenseScreen> {
       textCapitalization: TextCapitalization.characters,
       decoration: const InputDecoration(hintText: 'Comercio (opcional)'),
     ),
-    const SizedBox(height: 8),
-    CheckboxListTile(
-      contentPadding: EdgeInsets.zero,
-      controlAffinity: ListTileControlAffinity.leading,
-      value: _notFromWithdrawal,
-      onChanged: (v) => setState(() => _notFromWithdrawal = v ?? false),
-      title: const Text('No salió de un retiro'),
-      subtitle: const Text(
-        'Si sacaste ese efectivo del cajero, ya lo contamos en el retiro y no vuelve a descontarse.',
-        style: Fsf.ayuda,
+    const SizedBox(height: 16),
+    // Pregunta directa con dos opciones; «Sí» por defecto (lo normal: el efectivo sale del cajero).
+    const Text(fromAtmQuestion, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+    const SizedBox(height: 12),
+    LayoutBuilder(
+      builder: (context, box) => Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final (label, notFromAtm) in [(fromAtmYes, false), (fromAtmNo, true)])
+            SizedBox(
+              width: (box.maxWidth - 12) / 2,
+              child: CategoryOption(
+                label: label,
+                selected: _notFromWithdrawal == notFromAtm,
+                onTap: () => setState(() => _notFromWithdrawal = notFromAtm),
+              ),
+            ),
+        ],
       ),
     ),
+    const SizedBox(height: 8),
+    Text(_notFromWithdrawal ? countedToday : countedInWithdrawal, key: const Key('efecto_cajero'), style: Fsf.ayuda),
     if (_error != null) ...[
       const SizedBox(height: 8),
       Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
