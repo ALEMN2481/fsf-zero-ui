@@ -17,6 +17,7 @@
 - Verificación: backend 561 passed en la corrida completa (3 errores de preparación por `ReadTimeout` de Supabase local tras horas de carga; esos archivos pasan solos: 31 passed) y 12 tests nuevos del 15B; pgTAP 91; app `flutter analyze` sin problemas, `flutter test` → 127 passed (goldens 1–14 regenerados, 15 y 16a–c nuevos); emulador con FCM real: cabecera, gráfico, grupos, gasto desde retiro (no descuenta: $ 157.500 igual) y fuera de retiro ($ 157.500 → $ 152.500). Capturas `docs/capturas/paso15b_emulador_*.png` (correo tapado).
 - Commits: 8499bda, 74d7900, dd7a1c4.
 - Pendientes/riesgos: el perfil del supervisor no tiene nombre, así que la cabecera muestra el correo (en la expo se verá en pantalla); la cuenta tiene gastos de prueba de hoy (se limpian con `scripts.expo_seed`).
+- Ajustes del supervisor (71f38fc): la casilla pasó a la pregunta «¿Sacaste ese efectivo de un cajero?» (Sí por defecto / No, me lo dieron) con su efecto debajo; `/me` guarda en el perfil el nombre de la cuenta de Google si no tiene uno (`full_name`/`name` del JWT verificado) y `scripts.expo_seed --nombre` lo fija; la lista deja 112 px más la barra de gestos para que «+» no tape el último movimiento (test que falla con los 96 px anteriores). Backend 565 passed; app 128 passed; golden 16c regenerado. Verificado en el emulador: la cabecera ya no muestra el correo del supervisor.
 - Siguiente: medición de las 20 facturas y cierre del Paso 15.
 
 ## 2026-11-26 · Paso 15 — Seguridad y latencia para la expo (en curso: falta la medición)
